@@ -74,5 +74,8 @@ window.__AUF_STATE__ = () => {
     journalOpen: gs.isJournalOpen(),
     confirmModalOpen: gs.isConfirmModalOpen(),
     confirmModalTitle: gs.getConfirmModalTitle(),
+    atmospherePhase: gs.lightingController?.getCurrentPhase() ?? null,
+    atmosphereMode: gs.lightingController?.getSettings().atmosphereMode ?? null,
+    dayFraction: gs.lightingController ? Number(gs.lightingController.getDayFraction().toFixed(4)) : null,
   };
 };

@@ -32,6 +32,19 @@
 - [x] **Worldbuilding, Quest Architecture & Release Audit Documentation:**
   - Authored [`WORLD_BIBLE.md`](./WORLD_BIBLE.md), [`QUEST_DESIGN.md`](./QUEST_DESIGN.md), and [`qa/release-readiness/RELEASE_READINESS_AUDIT.md`](./qa/release-readiness/RELEASE_READINESS_AUDIT.md).
 
+## 1.5 Environment & Atmosphere Architecture (Phase 1 Implemented)
+
+- **Continuous 24-Hour Cycle:** Six distinct atmospheric stages (Dawn, Morning, Day, Golden Hour, Sunset, Night) smoothly interpolated via `TimeOfDayService` without hard visual jumps.
+- **Multiple Operational Modes:**
+  - **Local Time (Default):** Synchronizes automatically with player's device clock.
+  - **Living World Cycle:** Configurable in-game day (default 24-minute full cycle).
+  - **Fixed Atmosphere:** Locks to any desired stage (Dawn, Morning, Day, Golden Hour, Sunset, Night).
+  - **Dev/Test URL Parameter:** Deterministic override support via `?tod=dawn|morning|day|golden|sunset|night`.
+- **Dynamic Lighting & Cookie Bloom:** Additive light cookie sprites (`tex_light_cookie`) for braziers and lanterns scale and flicker naturally, dimming in noon daylight and glowing prominently during dusk and night.
+- **Readability & Identity Safeguards:** Guaranteed 0.65 ambient brightness floor at night prevents dark abyss conditions; canonical charcoal and antique gold Stabilizing Garment remains clearly visible; 1:1 Full HD UICamera is completely untinted.
+- **Dedicated Settings Storage:** Atmosphere preferences persist independently in `auf_settings_v1` without risk to `SaveState` v2 (`auf_save_v1`).
+- **Live Screenshot Suite:** Captured at 1920x1080 across all 6 phases in `qa/environment/` (`01-dawn.png` through `06-night.png`).
+
 ---
 
 ## 2. Deferred / Future Chapter Scope

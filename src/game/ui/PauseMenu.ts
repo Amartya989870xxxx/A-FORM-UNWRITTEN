@@ -1,12 +1,14 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH, PALETTE } from '../constants';
 import { AudioManager } from '../systems/AudioManager';
+import { SettingsManager } from '../systems/SettingsManager';
 
 export interface PauseMenuCallbacks {
   onResume: () => void;
   onOpenAtlas: () => void;
   onOpenJournal: () => void;
   onAudioToggled: () => void;
+  onAtmosphereToggled?: () => void;
   onRestart: () => void;
   onMainMenu: () => void;
 }
@@ -38,6 +40,14 @@ export class PauseMenu {
         },
       },
       { getLabel: () => 'Restart Chapter One', action: () => callbacks.onRestart() },
+      {
+        getLabel: () => `Atmosphere: ${SettingsManager.getAtmosphereLabel()}`,
+        action: () => {
+          SettingsManager.cycleAtmosphere();
+          callbacks.onAtmosphereToggled?.();
+          this.rebuild();
+        },
+      },
       { getLabel: () => 'Return to Title Screen', action: () => callbacks.onMainMenu() },
     ];
 
@@ -90,7 +100,7 @@ export class PauseMenu {
       .setInteractive();
 
     const w = 540;
-    const h = 490;
+    const h = 530;
     const panel = this.scene.add.graphics();
     panel.fillStyle(PALETTE.UI_BG, 0.97);
     panel.fillRoundedRect(-w / 2, -h / 2, w, h, 14);
@@ -98,7 +108,7 @@ export class PauseMenu {
     panel.strokeRoundedRect(-w / 2, -h / 2, w, h, 14);
 
     const title = this.scene.add
-      .text(0, -h / 2 + 44, 'JOURNEY PAUSED', {
+      .text(0, -h / 2 + 40, 'JOURNEY PAUSED', {
         fontFamily: 'Georgia, serif',
         fontSize: '23px',
         fontStyle: 'bold',
@@ -110,7 +120,7 @@ export class PauseMenu {
     const controlsNote = this.scene.add
       .text(
         0,
-        h / 2 - 30,
+        h / 2 - 26,
         'Move: A/D  •  Leap/Drift: Space  •  Impact: S+Space  •  Atlas: Tab',
         {
           fontFamily: 'Georgia, serif',
@@ -122,13 +132,13 @@ export class PauseMenu {
 
     this.container.add([backdrop, panel, title, controlsNote]);
 
-    const startY = -124;
-    const rowH = 48;
+    const startY = -148;
+    const rowH = 44;
 
     this.options.forEach((opt, idx) => {
       const selected = idx === this.selectedIndex;
-      const y = startY + idx * 57;
-      const btnW = 410;
+      const y = startY + idx * 53;
+      const btnW = 420;
 
       const bg = this.scene.add.graphics();
       bg.fillStyle(selected ? 0x1b2442 : 0x11172b, 0.96);

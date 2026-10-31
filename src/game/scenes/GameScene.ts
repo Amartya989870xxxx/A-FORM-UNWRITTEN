@@ -52,6 +52,7 @@ import { Journal } from '../ui/Journal';
 import { PauseMenu } from '../ui/PauseMenu';
 import { RestorationOverlay } from '../ui/RestorationOverlay';
 import { WorldMap } from '../ui/WorldMap';
+import { LightingController } from '../time/LightingController';
 import { ArtGenerator } from '../utils/ArtGenerator';
 
 export interface GameSceneInitData {
@@ -68,6 +69,8 @@ export class GameScene extends Phaser.Scene {
   private parallaxFar!: Phaser.GameObjects.TileSprite;
   private parallaxMid!: Phaser.GameObjects.TileSprite;
   private parallaxNear!: Phaser.GameObjects.TileSprite;
+  private skyImage!: Phaser.GameObjects.Image;
+  public lightingController!: LightingController;
   private vignetteImage!: Phaser.GameObjects.Image;
   private animatedPropsGfx!: Phaser.GameObjects.Graphics;
   private conduitLinesGfx!: Phaser.GameObjects.Graphics;
@@ -296,8 +299,8 @@ export class GameScene extends Phaser.Scene {
     const toCamScreenY = (screenY: number) =>
       GAME_HEIGHT / 2 + (screenY - GAME_HEIGHT / 2) * invZoom;
 
-    this.add
-      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'tex_sky_gradient')
+    this.skyImage = this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'tex_sky_dynamic')
       .setScrollFactor(0)
       .setScale(invZoom)
       .setDepth(0);
@@ -341,6 +344,22 @@ export class GameScene extends Phaser.Scene {
       .setDepth(3)
       .setAlpha(0.96);
 
+    // Screen-edge atmospheric vignette (rendered on 1:1 UI camera)
+    this.vignetteImage = this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'tex_vignette')
+      .setScrollFactor(0)
+      .setDepth(90);
+
+    // Initialize real-time dynamic atmosphere & time-of-day controller
+    this.lightingController = new LightingController({
+      scene: this,
+      skyImage: this.skyImage,
+      parallaxFar: this.parallaxFar,
+      parallaxMid: this.parallaxMid,
+      parallaxNear: this.parallaxNear,
+      vignetteImage: this.vignetteImage,
+    });
+
     // Volumetric 2.5D drifting valley mist bands
     const mistPlacements = [
       { x: 540, y: 900, scaleX: 1.8, scaleY: 1.15, alpha: 0.42, speed: 0.32, amp: 52, depth: 13 },
@@ -362,6 +381,7 @@ export class GameScene extends Phaser.Scene {
         speed: mp.speed,
         amp: mp.amp,
       });
+      this.lightingController.registerMistBand(sprite, mp.alpha);
     }
 
     // Subtle world-space ambient motes across the Shattered Verge
@@ -393,12 +413,6 @@ export class GameScene extends Phaser.Scene {
         blendMode: 'ADD',
       })
       .setDepth(12);
-
-    // Screen-edge atmospheric vignette (rendered on 1:1 UI camera)
-    this.vignetteImage = this.add
-      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'tex_vignette')
-      .setScrollFactor(0)
-      .setDepth(90);
   }
 
   private buildWorldGeometry(): void {
@@ -410,6 +424,13 @@ export class GameScene extends Phaser.Scene {
       }
       if (prop.kind === 'brazier') {
         const s = prop.scale ?? 1;
+        this.lightingController.registerLocalLight({
+          x: prop.x,
+          y: prop.y - 32 * s,
+          baseRadius: 115 * s,
+          baseIntensity: 0.85,
+          flickerSpeed: 3.2,
+        });
         this.add
           .particles(prop.x, prop.y - 38 * s, 'tex_mote_amber', {
             x: { min: -7, max: 7 },
@@ -1663,6 +1684,10 @@ export class GameScene extends Phaser.Scene {
       onAudioToggled: () => {
         this.hud.refresh();
       },
+      onAtmosphereToggled: () => {
+        const s = this.lightingController.getSettings();
+        this.lightingController.setAtmosphereMode(s.atmosphereMode, s.fixedPhase);
+      },
       onRestart: () => {
         this.pauseMenu.close();
         this.confirmModal.open({
@@ -1960,6 +1985,7 @@ export class GameScene extends Phaser.Scene {
       mb.sprite.x = mb.baseX + Math.sin(t * mb.speed + i * 1.4) * mb.amp;
     }
 
+    this.lightingController.update(time, delta);
     this.renderAnimatedWorldProps(time);
 
     // Global audio toggle

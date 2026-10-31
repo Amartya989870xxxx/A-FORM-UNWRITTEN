@@ -18,6 +18,186 @@ export class ArtGenerator {
     this.createParallaxNear(scene, 'tex_parallax_near');
     this.createVignette(scene, 'tex_vignette');
     this.createPixel(scene, 'tex_pixel');
+    this.createLightCookie(scene, 'tex_light_cookie');
+    this.createCelestialSun(scene, 'tex_celestial_sun');
+    this.createCelestialMoon(scene, 'tex_celestial_moon');
+    this.createStarsLayer(scene, 'tex_stars_layer');
+    this.createSkyDynamic(scene, 'tex_sky_dynamic');
+  }
+
+  public static hexToCss(colorHex: number): string {
+    return '#' + (colorHex & 0xffffff).toString(16).padStart(6, '0');
+  }
+
+  public static updateSkyDynamic(
+    scene: Phaser.Scene,
+    key: string,
+    topHex: number,
+    midHex: number,
+    bottomHex: number
+  ): void {
+    const tex = scene.textures.get(key);
+    if (!tex) return;
+    const canvas = tex.getSourceImage() as HTMLCanvasElement;
+    if (!canvas || !canvas.getContext) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const h = canvas.height;
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, this.hexToCss(topHex));
+    grad.addColorStop(0.52, this.hexToCss(midHex));
+    grad.addColorStop(1, this.hexToCss(bottomHex));
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, h);
+
+    if ('refresh' in tex && typeof (tex as unknown as { refresh: () => void }).refresh === 'function') {
+      (tex as unknown as { refresh: () => void }).refresh();
+    }
+  }
+
+  private static createSkyDynamic(scene: Phaser.Scene, key: string): void {
+    if (scene.textures.exists(key)) return;
+    const canvas = scene.textures.createCanvas(key, 4, 512);
+    if (!canvas) return;
+    const ctx = canvas.getContext();
+    const grad = ctx.createLinearGradient(0, 0, 0, 512);
+    grad.addColorStop(0, '#050814');
+    grad.addColorStop(0.52, '#0d152c');
+    grad.addColorStop(1, '#19223e');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 4, 512);
+    canvas.refresh();
+  }
+
+  private static createLightCookie(scene: Phaser.Scene, key: string): void {
+    if (scene.textures.exists(key)) return;
+    const size = 160;
+    const canvas = scene.textures.createCanvas(key, size, size);
+    if (!canvas) return;
+    const ctx = canvas.getContext();
+    const half = size / 2;
+    const grad = ctx.createRadialGradient(half, half, 4, half, half, half);
+    grad.addColorStop(0, 'rgba(255, 235, 170, 0.95)');
+    grad.addColorStop(0.2, 'rgba(255, 185, 90, 0.65)');
+    grad.addColorStop(0.5, 'rgba(240, 120, 40, 0.25)');
+    grad.addColorStop(0.75, 'rgba(220, 80, 20, 0.08)');
+    grad.addColorStop(1, 'rgba(180, 50, 10, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    canvas.refresh();
+  }
+
+  private static createCelestialSun(scene: Phaser.Scene, key: string): void {
+    if (scene.textures.exists(key)) return;
+    const size = 160;
+    const canvas = scene.textures.createCanvas(key, size, size);
+    if (!canvas) return;
+    const ctx = canvas.getContext();
+    const half = size / 2;
+
+    const corona = ctx.createRadialGradient(half, half, 16, half, half, half);
+    corona.addColorStop(0, 'rgba(255, 255, 240, 0.95)');
+    corona.addColorStop(0.24, 'rgba(255, 230, 150, 0.7)');
+    corona.addColorStop(0.52, 'rgba(255, 180, 70, 0.28)');
+    corona.addColorStop(0.78, 'rgba(255, 140, 40, 0.08)');
+    corona.addColorStop(1, 'rgba(255, 100, 20, 0)');
+    ctx.fillStyle = corona;
+    ctx.fillRect(0, 0, size, size);
+
+    // Warm solar core
+    ctx.fillStyle = '#fffdf5';
+    ctx.beginPath();
+    ctx.arc(half, half, 20, 0, Math.PI * 2);
+    ctx.fill();
+
+    canvas.refresh();
+  }
+
+  private static createCelestialMoon(scene: Phaser.Scene, key: string): void {
+    if (scene.textures.exists(key)) return;
+    const size = 160;
+    const canvas = scene.textures.createCanvas(key, size, size);
+    if (!canvas) return;
+    const ctx = canvas.getContext();
+    const half = size / 2;
+
+    // Soft silver-blue lunar aura
+    const aura = ctx.createRadialGradient(half, half, 14, half, half, half);
+    aura.addColorStop(0, 'rgba(220, 240, 255, 0.42)');
+    aura.addColorStop(0.42, 'rgba(140, 200, 245, 0.16)');
+    aura.addColorStop(1, 'rgba(100, 160, 230, 0)');
+    ctx.fillStyle = aura;
+    ctx.beginPath();
+    ctx.arc(half, half, half, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sculpted crescent moon
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(half, half, 34, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(235, 246, 255, 0.9)';
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(half - 12, half - 7, 32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Celestial golden astrolabe rim
+    ctx.strokeStyle = 'rgba(240, 190, 100, 0.38)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(half, half, 58, 20, -0.3, 0.2, 2.6);
+    ctx.stroke();
+
+    canvas.refresh();
+  }
+
+  private static createStarsLayer(scene: Phaser.Scene, key: string): void {
+    if (scene.textures.exists(key)) return;
+    const w = GAME_WIDTH;
+    const h = GAME_HEIGHT;
+    const canvas = scene.textures.createCanvas(key, w, h);
+    if (!canvas) return;
+    const ctx = canvas.getContext();
+
+    let seed = 4289;
+    const rand = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+
+    for (let i = 0; i < 280; i++) {
+      const sx = rand() * w;
+      const sy = rand() * (h * 0.72);
+      const r = 0.5 + rand() * 1.5;
+      const alpha = 0.25 + rand() * 0.7;
+
+      ctx.fillStyle =
+        i % 7 === 0
+          ? `rgba(255, 215, 140, ${alpha})`
+          : i % 4 === 0
+            ? `rgba(180, 225, 255, ${alpha})`
+            : `rgba(240, 248, 255, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (i % 22 === 0) {
+        ctx.strokeStyle = `rgba(240, 248, 255, ${alpha * 0.65})`;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(sx - 4, sy);
+        ctx.lineTo(sx + 4, sy);
+        ctx.moveTo(sx, sy - 4);
+        ctx.lineTo(sx, sy + 4);
+        ctx.stroke();
+      }
+    }
+
+    canvas.refresh();
   }
 
   private static createPixel(scene: Phaser.Scene, key: string): void {

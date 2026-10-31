@@ -6,6 +6,7 @@ export const WORLD_WIDTH = 5500;
 export const WORLD_HEIGHT = 1420;
 
 export const SAVE_STORAGE_KEY = 'auf_save_v1';
+export const SETTINGS_STORAGE_KEY = 'auf_settings_v1';
 export const AUDIO_PREF_KEY = 'auf_audio_muted_v1';
 
 export const DEFAULT_PLAYER_NAME = 'The Unwritten';

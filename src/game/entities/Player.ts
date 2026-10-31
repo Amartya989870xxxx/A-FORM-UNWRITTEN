@@ -270,7 +270,7 @@ export class Player {
       !onGround &&
       profile.canGroundImpact &&
       input.down &&
-      (input.jumpJustPressed || this.jumpBufferMs > 0) &&
+      (input.jumpJustPressed || this.jumpBufferMs > 0 || input.jumpHeld) &&
       !this.isGroundImpacting
     ) {
       this.isGroundImpacting = true;

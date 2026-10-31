@@ -59,6 +59,9 @@ npm test
 
 # Full HD (1920x1080) end-to-end headless Chrome gameplay verification (Playwright)
 npm run verify:e2e
+
+# Capture Full HD screenshots across all 6 time-of-day atmospheric stages
+npm run capture:atmosphere
 ```
 
 ---

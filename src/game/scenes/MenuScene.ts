@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH, PALETTE, SCENE_KEYS } from '../constants';
 import { AudioManager } from '../systems/AudioManager';
 import { SaveManager, type SaveState } from '../systems/SaveManager';
+import { SettingsManager } from '../systems/SettingsManager';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { promptForPlayerName } from '../ui/NamePrompt';
 
@@ -122,7 +123,7 @@ export class MenuScene extends Phaser.Scene {
     rule.strokePath();
 
     this.buildActions();
-    this.menuContainer = this.add.container(GAME_WIDTH / 2, 560).setDepth(20);
+    this.menuContainer = this.add.container(GAME_WIDTH / 2, 520).setDepth(20);
     this.loreModal = this.add
       .container(GAME_WIDTH / 2, GAME_HEIGHT / 2)
       .setDepth(60)
@@ -177,6 +178,14 @@ export class MenuScene extends Phaser.Scene {
         },
       },
       {
+        label: () => `Atmosphere: ${SettingsManager.getAtmosphereLabel()}`,
+        sublabel: () => 'Local device clock, accelerated cycle, or fixed time of day',
+        execute: () => {
+          SettingsManager.cycleAtmosphere();
+          this.renderMenuButtons();
+        },
+      },
+      {
         label: () => 'Controls & Premise',
         execute: () => this.toggleLoreModal(true),
       },
@@ -195,11 +204,11 @@ export class MenuScene extends Phaser.Scene {
   private renderMenuButtons(): void {
     this.menuContainer.removeAll(true);
     const btnW = 540;
-    const btnH = 72;
+    const btnH = 68;
 
     this.actions.forEach((act, idx) => {
       const selected = idx === this.selectedIndex;
-      const y = idx * 86;
+      const y = idx * 78;
       const sub = act.sublabel?.();
 
       const bg = this.add.graphics();
