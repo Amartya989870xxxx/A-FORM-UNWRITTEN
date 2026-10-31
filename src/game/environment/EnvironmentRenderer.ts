@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { PALETTE } from '../constants';
+import { GAME_WIDTH, PALETTE, WORLD_CAMERA_ZOOM } from '../constants';
 import type { ForegroundSilhouetteDef, PlatformDef } from '../data/world';
 import type { LightingController } from '../time/LightingController';
 import { AtmosphereFX } from './AtmosphereFX';
@@ -22,8 +22,10 @@ export class EnvironmentRenderer {
   private lightingController?: LightingController;
 
   private parallaxLayers: ParallaxLayer[] = [];
+  private platformSprites: Phaser.GameObjects.TileSprite[] = [];
   private terrainGraphics?: Phaser.GameObjects.Graphics;
   private foregroundGraphics?: Phaser.GameObjects.Graphics;
+  private foregroundTile?: Phaser.GameObjects.TileSprite;
   private propPlacer?: PropPlacer;
   private atmosphereFX?: AtmosphereFX;
   private legacyMode = false;
@@ -124,6 +126,11 @@ export class EnvironmentRenderer {
 
     // Update drifting mist bands
     this.atmosphereFX?.update(time);
+
+    // Update foreground overhang parallax
+    if (this.foregroundTile) {
+      this.foregroundTile.tilePositionX = camera.scrollX * 1.08;
+    }
   }
 
   public destroy(): void {
@@ -132,8 +139,14 @@ export class EnvironmentRenderer {
     }
     this.parallaxLayers = [];
 
+    for (const tile of this.platformSprites) {
+      tile.destroy();
+    }
+    this.platformSprites = [];
+
     this.terrainGraphics?.destroy();
     this.foregroundGraphics?.destroy();
+    this.foregroundTile?.destroy();
     this.propPlacer?.destroy();
     this.atmosphereFX?.destroy();
     this.active = false;
@@ -144,7 +157,40 @@ export class EnvironmentRenderer {
 
     for (const p of platforms) {
       const skin = this.resolvePlatformSkin(p);
-      TerrainSkinner.renderPlatform(this.terrainGraphics, p.x, p.y, p.width, p.height, skin);
+      let textured = false;
+
+      let texKey: string | undefined;
+      if (skin === 'grass') {
+        texKey = 'tex_terrain_highland_ground';
+      } else if (skin === 'stone_paving') {
+        texKey = 'tex_terrain_stone_paving';
+      } else if (skin === 'rocky_outcrop') {
+        texKey = 'tex_terrain_rocky_outcrop';
+      }
+
+      if (
+        texKey &&
+        this.scene.textures &&
+        typeof this.scene.textures.exists === 'function' &&
+        this.scene.textures.exists(texKey)
+      ) {
+        const tile = this.scene.add
+          .tileSprite(p.x, p.y - p.height / 2, p.width, p.height, texKey)
+          .setOrigin(0.5, 0)
+          .setDepth(16);
+        this.platformSprites.push(tile);
+        textured = true;
+      }
+
+      TerrainSkinner.renderPlatform(
+        this.terrainGraphics,
+        p.x,
+        p.y,
+        p.width,
+        p.height,
+        skin,
+        textured
+      );
     }
   }
 
@@ -161,6 +207,20 @@ export class EnvironmentRenderer {
   }
 
   private buildForegroundDepth(silhouettes: ForegroundSilhouetteDef[]): void {
+    if (
+      this.scene.textures &&
+      typeof this.scene.textures.exists === 'function' &&
+      this.scene.textures.exists('tex_highland_fg')
+    ) {
+      const invZoom = 1 / WORLD_CAMERA_ZOOM;
+      this.foregroundTile = this.scene.add
+        .tileSprite(GAME_WIDTH / 2, 80, GAME_WIDTH * 1.5, 360, 'tex_highland_fg')
+        .setScrollFactor(0)
+        .setScale(invZoom)
+        .setDepth(66)
+        .setAlpha(0.68);
+    }
+
     this.foregroundGraphics = this.scene.add
       .graphics()
       .setDepth(65)

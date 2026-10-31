@@ -14,8 +14,24 @@ export class TerrainSkinner {
     y: number,
     w: number,
     h: number,
-    skin: TerrainSkinId
+    skin: TerrainSkinId,
+    textured = false
   ): void {
+    if (textured) {
+      const left = x - w / 2;
+      const top = y - h / 2;
+      // Soft ambient contact shadow beneath platform
+      g.fillStyle(0x060810, 0.45);
+      g.fillRect(left + 2, top + h, w - 4, 3);
+      // Subtle top edge rim light
+      g.lineStyle(1, PALETTE.STONE_HIGHLIGHT, 0.35);
+      g.beginPath();
+      g.moveTo(left, top);
+      g.lineTo(left + w, top);
+      g.strokePath();
+      return;
+    }
+
     switch (skin) {
       case 'ground':
       case 'floating':

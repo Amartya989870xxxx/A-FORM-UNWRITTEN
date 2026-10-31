@@ -16,8 +16,21 @@ export class ParallaxLayer {
     const h = def.height ?? 680;
     const yPos = toCamScreenY(def.baseY);
 
+    let textureKey = def.textureKey;
+    if (scene.textures && typeof scene.textures.exists === 'function') {
+      if (!scene.textures.exists(textureKey)) {
+        if (def.id.includes('far') && scene.textures.exists('tex_parallax_far')) {
+          textureKey = 'tex_parallax_far';
+        } else if (def.id.includes('mid') && scene.textures.exists('tex_parallax_mid')) {
+          textureKey = 'tex_parallax_mid';
+        } else if (def.id.includes('near') && scene.textures.exists('tex_parallax_near')) {
+          textureKey = 'tex_parallax_near';
+        }
+      }
+    }
+
     this.tileSprite = scene.add
-      .tileSprite(GAME_WIDTH / 2, yPos, GAME_WIDTH, h, def.textureKey)
+      .tileSprite(GAME_WIDTH / 2, yPos, GAME_WIDTH, h, textureKey)
       .setScrollFactor(0)
       .setScale(invZoom)
       .setDepth(def.depth)

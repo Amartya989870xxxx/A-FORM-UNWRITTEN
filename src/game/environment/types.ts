@@ -54,7 +54,12 @@ export type PropKind =
   | 'grass_tuft'
   | 'banner'
   | 'lantern'
-  | 'rock_cluster';
+  | 'rock_cluster'
+  | 'wind_chimes'
+  | 'stone_lantern'
+  | 'statue_fragment'
+  | 'wildflowers'
+  | 'ivy_overhang';
 
 export interface PropPlacement {
   id: string;
@@ -65,6 +70,7 @@ export interface PropPlacement {
   depth?: number;
   sway?: boolean;
   hasLight?: boolean;
+  textureKey?: string;
 }
 
 export interface RegionMistPlacement {

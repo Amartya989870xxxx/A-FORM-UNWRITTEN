@@ -3,11 +3,18 @@ import { PALETTE } from '../constants';
 import type { LightingController } from '../time/LightingController';
 import type { PropPlacement } from './types';
 
+interface PlacedPropImage {
+  image: Phaser.GameObjects.Image;
+  prop: PropPlacement;
+  index: number;
+}
+
 export class PropPlacer {
   private readonly scene: Phaser.Scene;
   private readonly staticGraphics: Phaser.GameObjects.Graphics;
   private readonly animatedGraphics: Phaser.GameObjects.Graphics;
   private animatedProps: PropPlacement[] = [];
+  private propImages: PlacedPropImage[] = [];
   private lightingController?: LightingController;
 
   constructor(scene: Phaser.Scene, lightingController?: LightingController) {
@@ -29,7 +36,38 @@ export class PropPlacer {
 
   public placeProp(prop: PropPlacement): void {
     const scale = prop.scale ?? 1;
-    this.drawStaticProp(this.staticGraphics, prop.x, prop.y, prop.kind, scale);
+    let renderedAsImage = false;
+
+    let texKey = prop.textureKey;
+    if (!texKey) {
+      if (prop.kind === 'wind_chimes') texKey = 'tex_prop_wind_chimes';
+      else if (prop.kind === 'stone_lantern') texKey = 'tex_prop_stone_lantern';
+      else if (prop.kind === 'statue_fragment') texKey = 'tex_prop_statue_fragment';
+      else if (prop.kind === 'wildflowers') texKey = 'tex_prop_wildflowers';
+    }
+
+    if (
+      texKey &&
+      this.scene.textures &&
+      typeof this.scene.textures.exists === 'function' &&
+      this.scene.textures.exists(texKey)
+    ) {
+      const img = this.scene.add.image(prop.x, prop.y, texKey);
+      if (prop.kind === 'wind_chimes') {
+        img.setOrigin(0.5, 0.0);
+      } else {
+        img.setOrigin(0.5, 1.0);
+      }
+      img.setScale(scale);
+      const depth = prop.depth ?? (prop.kind === 'stone_lantern' || prop.kind === 'wildflowers' ? 14 : 13);
+      img.setDepth(depth);
+      this.propImages.push({ image: img, prop, index: this.propImages.length });
+      renderedAsImage = true;
+    }
+
+    if (!renderedAsImage) {
+      this.drawStaticProp(this.staticGraphics, prop.x, prop.y, prop.kind, scale);
+    }
 
     if (prop.kind === 'brazier' || prop.kind === 'waterfall' || prop.sway) {
       this.animatedProps.push(prop);
@@ -59,6 +97,16 @@ export class PropPlacer {
           blendMode: 'ADD',
         })
         .setDepth(14);
+    } else if (prop.kind === 'stone_lantern' || prop.hasLight) {
+      if (this.lightingController) {
+        this.lightingController.registerLocalLight({
+          x: prop.x,
+          y: prop.y - 18 * scale,
+          baseRadius: 110,
+          baseIntensity: 0.8,
+          flickerSpeed: 1.6,
+        });
+      }
     }
   }
 
@@ -133,18 +181,36 @@ export class PropPlacer {
         this.animatedGraphics.strokePath();
       }
     }
+
+    for (const item of this.propImages) {
+      if (item.prop.sway) {
+        if (item.prop.kind === 'wind_chimes') {
+          item.image.setRotation(Math.sin(t * 1.8 + item.index * 1.4) * 0.05);
+        } else if (item.prop.kind === 'wildflowers') {
+          item.image.setRotation(Math.sin(t * 2.6 + item.index * 1.1) * 0.035);
+        }
+      }
+    }
   }
 
   public clear(): void {
     this.staticGraphics.clear();
     this.animatedGraphics.clear();
     this.animatedProps = [];
+    for (const item of this.propImages) {
+      item.image.destroy();
+    }
+    this.propImages = [];
   }
 
   public destroy(): void {
     this.staticGraphics.destroy();
     this.animatedGraphics.destroy();
     this.animatedProps = [];
+    for (const item of this.propImages) {
+      item.image.destroy();
+    }
+    this.propImages = [];
   }
 
   private drawStaticProp(
@@ -262,6 +328,76 @@ export class PropPlacer {
         g.fillRoundedRect(x - 7 * scale, floorY - h + 16 * scale, 14 * scale, 18 * scale, 3);
         g.fillStyle(PALETTE.BRAZIER_FLAME, 0.85);
         g.fillRect(x - 4 * scale, floorY - h + 20 * scale, 8 * scale, 10 * scale);
+        break;
+      }
+
+      case 'wind_chimes': {
+        const h = 54 * scale;
+        g.lineStyle(1.4, PALETTE.REMNANT_BRONZE, 0.85);
+        g.beginPath();
+        g.moveTo(x - 14 * scale, floorY);
+        g.lineTo(x + 14 * scale, floorY);
+        g.moveTo(x, floorY);
+        g.lineTo(x, floorY + 12 * scale);
+        g.strokePath();
+        for (let i = -2; i <= 2; i++) {
+          const cx = x + i * 5 * scale;
+          const clen = (h - Math.abs(i) * 6) * 0.7;
+          g.lineStyle(1, PALETTE.REMNANT_GOLD, 0.8);
+          g.beginPath();
+          g.moveTo(cx, floorY + 12 * scale);
+          g.lineTo(cx, floorY + 12 * scale + clen);
+          g.strokePath();
+        }
+        break;
+      }
+
+      case 'stone_lantern': {
+        const h = 48 * scale;
+        g.fillStyle(0x283244, 0.95);
+        g.fillRect(x - 9 * scale, floorY - 6 * scale, 18 * scale, 6 * scale);
+        g.fillRect(x - 4 * scale, floorY - h + 12 * scale, 8 * scale, h - 18 * scale);
+        g.fillStyle(0x35435c, 1);
+        g.fillRect(x - 11 * scale, floorY - h + 6 * scale, 22 * scale, 14 * scale);
+        g.fillStyle(PALETTE.BRAZIER_FLAME, 0.9);
+        g.fillRect(x - 6 * scale, floorY - h + 8 * scale, 12 * scale, 10 * scale);
+        g.fillStyle(0x1e2634, 1);
+        g.beginPath();
+        g.moveTo(x - 14 * scale, floorY - h + 6 * scale);
+        g.lineTo(x, floorY - h - 4 * scale);
+        g.lineTo(x + 14 * scale, floorY - h + 6 * scale);
+        g.closePath();
+        g.fillPath();
+        break;
+      }
+
+      case 'statue_fragment': {
+        const h = 38 * scale;
+        g.fillStyle(0x263348, 0.92);
+        g.beginPath();
+        g.moveTo(x - 14 * scale, floorY);
+        g.lineTo(x - 10 * scale, floorY - h);
+        g.lineTo(x + 12 * scale, floorY - h * 0.7);
+        g.lineTo(x + 16 * scale, floorY);
+        g.closePath();
+        g.fillPath();
+        g.lineStyle(1.2, PALETTE.MOSS_TEAL, 0.5);
+        g.strokePath();
+        break;
+      }
+
+      case 'wildflowers': {
+        for (let i = -2; i <= 2; i++) {
+          const fx = x + i * 7 * scale;
+          const fh = (16 + Math.abs(i) * 4) * scale;
+          g.lineStyle(1.2, 0x3d7a58, 0.85);
+          g.beginPath();
+          g.moveTo(fx, floorY);
+          g.lineTo(fx + i * 2, floorY - fh);
+          g.strokePath();
+          g.fillStyle(i % 2 === 0 ? PALETTE.ETHEREAL_CYAN : 0xfff6d0, 0.9);
+          g.fillCircle(fx + i * 2, floorY - fh, 2.5 * scale);
+        }
         break;
       }
 

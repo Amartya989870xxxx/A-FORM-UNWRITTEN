@@ -11,7 +11,8 @@
     "test": "vitest run",
     "verify:e2e": "npm run build && node scripts/verify-gameplay.mjs",
     "capture:atmosphere": "node scripts/capture-atmosphere-screenshots.mjs",
-    "capture:parity": "node scripts/capture-phase2-parity.mjs"
+    "capture:parity": "node scripts/capture-phase2-parity.mjs",
+    "capture:phase3": "npm run build && node scripts/capture-phase3-verification.mjs"
   },
   "dependencies": {
     "phaser": "^3.88.2"

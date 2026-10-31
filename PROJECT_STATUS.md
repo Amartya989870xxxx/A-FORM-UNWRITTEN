@@ -65,6 +65,30 @@
   - 12 Full HD (1920x1080) parity screenshots captured across 6 key viewports in `qa/phase2-parity/` verifying pixel-accurate parity between modular and legacy rendering modes.
   - Full Playwright E2E verification (`npm run verify:e2e`) passing with zero errors.
 
+## 1.7 Illustrated Environment: Whispering Precipice (Phase 3 Implemented)
+
+- **First Illustrated Biome (`src/game/environment/regions/vergeHighlands.ts`, `src/assets/environments/verge_highlands/`):**
+  - High-resolution painted 2.5D environment for Whispering Precipice and Counterweight Courtyard (`x: 0..1500`, `y: 560..1000`).
+  - Seamless Far Parallax (`bg_highland_far.webp`, scroll 0.12): distant alpine ranges, cumulus cloud sea, Broken Ring-Monolith, smooth vertical sky dissolve.
+  - Seamless Mid Parallax (`bg_highland_mid.webp`, scroll 0.27): ancient limestone aqueduct, cascading waterfalls, highland pines, transparent sky apertures.
+  - Seamless Near Parallax (`bg_highland_near.webp`, scroll 0.48): weathered fluted columns, ruined arch tops, climbing ivy, hanging cloth banners.
+  - Foreground Framing (`fg_highland_overhang.png`, depth 66, scroll 1.08): overhanging ivy canopy and stone cornice providing cinematic framing.
+  - Dynamic Environmental Props: ancient bronze wind chimes with wind sway, carved limestone lanterns with integrated real-time flickering point lights (depth 17), moss-draped classical bust fragment on echo ledge, alpine gentian and edelweiss wildflowers.
+  - Illustrated Platform Skins: `terrain_highland_ground.png` (lush grass, kintsugi gold veins), `terrain_stone_paving.png` (fitted mossy pavers), `terrain_rocky_outcrop.png` (chiseled rock ledge).
+- **Collision & Kinematics Invariant:**
+  - 100% collision parity verified against baseline: all 45 platform colliders remain immutable.
+  - Zero float, zero sink: platform walking surfaces align with physics bodies down to the sub-pixel.
+- **Budget Compliance:**
+  - Total compressed region assets: 1,327 KB (~1.33 MB), utilizing only 26.5% of the 5.0 MB maximum budget.
+- **Atmospheric Coherence:**
+  - All 6 time-of-day phases (Dawn, Morning, Day, Golden Hour, Sunset, Night) seamlessly illuminate the illustrated art without baked lighting artifacts.
+  - Moonlit night remains clearly readable with soft ambient illumination and glowing lanterns.
+- **Automated Verification & Artifacts:**
+  - 8 Full HD verification screenshots captured in `qa/phase3-highlands/` across spawn, dawn, sunset, night, courtyard, platform collision edge, desktop wide, and mobile viewports.
+  - Comprehensive documentation authored: [`ASSET_MANIFEST.md`](./ASSET_MANIFEST.md) and [`ENVIRONMENT_ART_GUIDE.md`](./ENVIRONMENT_ART_GUIDE.md).
+  - All 34 Vitest tests passing (`npm test`).
+  - Full Playwright E2E verification passing with zero errors (`npm run verify:e2e`).
+
 ---
 
 ## 2. Deferred / Future Chapter Scope

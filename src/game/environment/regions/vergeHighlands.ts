@@ -1,0 +1,78 @@
+import type { ParallaxLayerDef, RegionDefinition } from '../types';
+
+export const VERGE_HIGHLANDS_PARALLAX_LAYERS: ParallaxLayerDef[] = [
+  {
+    id: 'shattered_verge_far',
+    textureKey: 'tex_highland_far',
+    depth: 1,
+    scrollFactorX: 0.12,
+    scrollFactorY: 0.04,
+    alpha: 0.95,
+    baseY: 740,
+    height: 680,
+    tintBand: 'far',
+  },
+  {
+    id: 'shattered_verge_mid',
+    textureKey: 'tex_highland_mid',
+    depth: 2,
+    scrollFactorX: 0.27,
+    scrollFactorY: 0.08,
+    alpha: 0.96,
+    baseY: 760,
+    height: 680,
+    tintBand: 'mid',
+  },
+  {
+    id: 'shattered_verge_near',
+    textureKey: 'tex_highland_near',
+    depth: 3,
+    scrollFactorX: 0.48,
+    scrollFactorY: 0.12,
+    alpha: 0.98,
+    baseY: 780,
+    height: 700,
+    tintBand: 'near',
+  },
+];
+
+export const REGION_PRECIPICE: RegionDefinition = {
+  id: 'shattered_verge_precipice',
+  name: 'The Whispering Precipice',
+  biome: 'ancient_ruins',
+  bounds: { x: 0, y: 560, width: 1500, height: 500 },
+  lightingProfile: 'outdoor',
+  defaultTerrainSkin: 'grass',
+  platformSkinOverrides: {
+    p_z1_start: 'grass',
+    p_z1_safety: 'rocky_outcrop',
+    p_z1_courtyard: 'stone_paving',
+    p_z1_echo_ledge: 'limestone',
+    p_shaft_step_0: 'stone_paving',
+    p_shaft_step_1: 'sanctum',
+    p_shaft_step_2: 'sanctum',
+    p_shaft_step_3: 'sanctum',
+    p_shaft_wall_e: 'sanctum',
+  },
+  parallaxLayers: VERGE_HIGHLANDS_PARALLAX_LAYERS,
+  props: [
+    { id: 'prop_p1', x: 92, y: 840, kind: 'arch', scale: 1.0 },
+    { id: 'prop_p2', x: 185, y: 840, kind: 'brazier', scale: 1.0, hasLight: true },
+    { id: 'prop_p3', x: 350, y: 840, kind: 'pillar', scale: 0.92 },
+    { id: 'prop_p4', x: 700, y: 840, kind: 'statue', scale: 1.0 },
+    { id: 'prop_p5', x: 985, y: 840, kind: 'brazier', scale: 1.0, hasLight: true },
+    // Illustrated Phase 3 Highland props
+    { id: 'prop_p_wind_chimes_1', x: 55, y: 770, kind: 'wind_chimes', scale: 0.35, sway: true },
+    { id: 'prop_p_flowers_1', x: 135, y: 840, kind: 'wildflowers', scale: 0.22, sway: true },
+    { id: 'prop_p_flowers_2', x: 285, y: 840, kind: 'wildflowers', scale: 0.22, sway: true },
+    { id: 'prop_p_flowers_3', x: 440, y: 840, kind: 'wildflowers', scale: 0.22, sway: true },
+    { id: 'prop_p_lantern_1', x: 620, y: 840, kind: 'stone_lantern', scale: 0.22, hasLight: true },
+    { id: 'prop_p_statue_frag_1', x: 825, y: 640, kind: 'statue_fragment', scale: 0.18 },
+    { id: 'prop_p_lantern_2', x: 1120, y: 840, kind: 'stone_lantern', scale: 0.22, hasLight: true },
+  ],
+  mistPlacements: [
+    { x: 540, y: 900, scaleX: 1.8, scaleY: 1.15, alpha: 0.42, speed: 0.32, amp: 52, depth: 13 },
+    { x: 1295, y: 785, scaleX: 1.9, scaleY: 1.25, alpha: 0.46, speed: 0.4, amp: 44, depth: 13 },
+  ],
+  ambientParticleType: 'cyan',
+};

@@ -1,10 +1,10 @@
-# A FORM UNWRITTEN — Release Readiness Audit & Verification Report
+# A FORM UNWRITTEN  -  Release Readiness Audit & Verification Report
 
 **Audit Date:** 2026-10-31  
 **Project Root:** `/Users/amartyamajumder/AUF Game`  
 **Branch:** `visual-polish-codday`  
 **Baseline Tag (`baseline-pre-expansion`):** `6815563f75d124278d8b4153c30e9b7f6554cea1` *(verified intact & untouched)*  
-**Overall Readiness Verdict:** **READY FOR CHAPTER ONE VERTICAL-SLICE RELEASE** — All **7 Medium-severity (`M-1`..`M-7`)** and **6 Low-severity (`L-1`..`L-6`)** findings identified in the initial read-only audit have been resolved, verified across `npm run build`, `npm test` (`12/12`), `npm run verify:e2e`, and live 6-viewport browser measurements (`0` console errors, `0` failed network requests), and committed cleanly on `visual-polish-codday`.
+**Overall Readiness Verdict:** **READY FOR CHAPTER ONE VERTICAL-SLICE RELEASE**  -  All **7 Medium-severity (`M-1`..`M-7`)** and **6 Low-severity (`L-1`..`L-6`)** findings identified in the initial read-only audit have been resolved, verified across `npm run build`, `npm test` (`12/12`), `npm run verify:e2e`, and live 6-viewport browser measurements (`0` console errors, `0` failed network requests), and committed cleanly on `visual-polish-codday`.
 
 ---
 
@@ -13,7 +13,7 @@
 - **Tag Exists:** Yes (`refs/tags/baseline-pre-expansion`)
 - **Points To Valid Git Commit:** Yes (untouched throughout all post-audit fixes)
 - **Exact Commit SHA:** `6815563f75d124278d8b4153c30e9b7f6554cea1`
-- **Commit Author & Timestamp:** `Amartya Majumder <amartyamajumder2004@gmail.com>` — `2026-10-31 12:53:33 +0530`
+- **Commit Author & Timestamp:** `Amartya Majumder <amartyamajumder2004@gmail.com>`  -  `2026-10-31 12:53:33 +0530`
 - **Commit Subject:** `chore: baseline vertical slice + reference assets checkpoint`
 
 ---
@@ -90,7 +90,7 @@ By removing CSS Grid/Flexbox centering from `#game-shell` and `#game-container` 
 2. **UI / Map Representation Only (Not Playable in Chapter One):**
    - The remaining `17` of `18` known regions across the `4` continental polygons on `WorldMap` (`World Continents [2]`), plus the `5th` far-eastern tempest-shrouded landmass (*Uncharted Abyssal Shroud*, `totalRegions: 0`).
 3. **Persisted State Fields Reserved for Future Chapters:**
-   - `SoulSpectrumState` (`azure`, `verdant`, `amber`, `crimson`, `violet`, `silver` — tracked, persisted, and charted in Chronicle Page 2 for future chapter reactivity) and `blackOrbUsedCount` (persisted as `0`).
+   - `SoulSpectrumState` (`azure`, `verdant`, `amber`, `crimson`, `violet`, `silver`  -  tracked, persisted, and charted in Chronicle Page 2 for future chapter reactivity) and `blackOrbUsedCount` (persisted as `0`).
 4. **Design Documentation Only (`WORLD_BIBLE.md` & `QUEST_DESIGN.md`):**
    - Interior kingdoms/cities (*Ashenweld*, *Highcrown Citadel*, *Luminar*), Guild Charter Halls, Ranks `E` through `S` trials, companion *Lyra*, additional Remnants, and Chapters Two+.
 
@@ -100,17 +100,17 @@ By removing CSS Grid/Flexbox centering from `#game-shell` and `#game-container` 
 
 - **Astral Essence Visibility During Ordinary Gameplay:** **`0%` (None).** Across all gameplay states, menus, stabilization ceremonies, and the new Compass-Lens outer astrolabe directional arc, the protagonist is rendered exclusively as the **charcoal-and-gold Stabilizing Garment** with swept silver-ash cowl folds concealing a dark void face.
 - **Updated Live Screenshots (`qa/release-readiness/`):**
-  1. [`01-main-menu.png`](./01-main-menu.png) — Title screen with `Continue Journey` (`Aurelius (Rank F)`), `Begin New Journey`, `Controls & Premise`, and `Audio`.
-  2. [`02-player-naming.png`](./02-player-naming.png) — Native accessible `<dialog id="name-dialog">` modal.
-  3. [`03-normal-gameplay.png`](./03-normal-gameplay.png) — Opening Courtyard & first chasm with **`L-1` verified** (zero foreground pillar occlusion over chasm ledge or reset pedestal).
-  4. [`04-world-atlas.png`](./04-world-atlas.png) & [`04b-world-atlas-continents.png`](./04b-world-atlas-continents.png) — Regional Survey with **`L-3` verified** (uniform opaque dark fog with zero pill silhouettes or unexplored route bleed) and Continental World View.
-  5. [`05-stabilizing-garment.png`](./05-stabilizing-garment.png) & [`05b-stabilizing-garment-grounded.png`](./05b-stabilizing-garment-grounded.png) — Unanchored vs. Grounded Stabilizing Garment close-ups.
-  6. [`06-crucible-puzzle.png`](./06-crucible-puzzle.png) — Crucible of Mass 3-Lock Dome Puzzle with **`L-2` verified** (chapter banner positioned cleanly in upper sky above the Zenith Dome Seal).
-  7. [`07a-stabilization-rite-inworld.png`](./07a-stabilization-rite-inworld.png) & [`07-stabilization-ceremony.png`](./07-stabilization-ceremony.png) — Stabilization ceremony with **`M-3` verified** (top-right HUD quest tracker coherently displaying `RANK F • The Weight of Becoming`).
-  8. [`08-chapter-one-ending.png`](./08-chapter-one-ending.png) — Chapter One conclusion ledger (`3 / 3` Echo Tablets, `1` Relic, `Guild Rank F`, cartography percentages).
-  9. [`09-pre-weight-warning-modal.png`](./09-pre-weight-warning-modal.png) — **`M-7` verified:** `ANCHOR THE REMNANT OF WEIGHT?` pre-stabilization warning modal (`Step Back (Explore First)` focused by default).
-  10. [`10-compass-lens-and-dual-hud.png`](./10-compass-lens-and-dual-hud.png) — **`M-5` & `L-4` verified:** Wayfarer's Compass-Lens proximity shimmer on undiscovered Echo Tablet III + subtle garment astrolabe directional arc + simultaneous HUD Imprint & Compass-Lens rows.
-  11. [`11-restart-confirmation-modal.png`](./11-restart-confirmation-modal.png) — **`L-5` verified:** `RESTART CHAPTER ONE?` confirmation modal (`Cancel (Keep Save)` focused by default).
+  1. [`01-main-menu.png`](./01-main-menu.png)  -  Title screen with `Continue Journey` (`Aurelius (Rank F)`), `Begin New Journey`, `Controls & Premise`, and `Audio`.
+  2. [`02-player-naming.png`](./02-player-naming.png)  -  Native accessible `<dialog id="name-dialog">` modal.
+  3. [`03-normal-gameplay.png`](./03-normal-gameplay.png)  -  Opening Courtyard & first chasm with **`L-1` verified** (zero foreground pillar occlusion over chasm ledge or reset pedestal).
+  4. [`04-world-atlas.png`](./04-world-atlas.png) & [`04b-world-atlas-continents.png`](./04b-world-atlas-continents.png)  -  Regional Survey with **`L-3` verified** (uniform opaque dark fog with zero pill silhouettes or unexplored route bleed) and Continental World View.
+  5. [`05-stabilizing-garment.png`](./05-stabilizing-garment.png) & [`05b-stabilizing-garment-grounded.png`](./05b-stabilizing-garment-grounded.png)  -  Unanchored vs. Grounded Stabilizing Garment close-ups.
+  6. [`06-crucible-puzzle.png`](./06-crucible-puzzle.png)  -  Crucible of Mass 3-Lock Dome Puzzle with **`L-2` verified** (chapter banner positioned cleanly in upper sky above the Zenith Dome Seal).
+  7. [`07a-stabilization-rite-inworld.png`](./07a-stabilization-rite-inworld.png) & [`07-stabilization-ceremony.png`](./07-stabilization-ceremony.png)  -  Stabilization ceremony with **`M-3` verified** (top-right HUD quest tracker coherently displaying `RANK F • The Weight of Becoming`).
+  8. [`08-chapter-one-ending.png`](./08-chapter-one-ending.png)  -  Chapter One conclusion ledger (`3 / 3` Echo Tablets, `1` Relic, `Guild Rank F`, cartography percentages).
+  9. [`09-pre-weight-warning-modal.png`](./09-pre-weight-warning-modal.png)  -  **`M-7` verified:** `ANCHOR THE REMNANT OF WEIGHT?` pre-stabilization warning modal (`Step Back (Explore First)` focused by default).
+  10. [`10-compass-lens-and-dual-hud.png`](./10-compass-lens-and-dual-hud.png)  -  **`M-5` & `L-4` verified:** Wayfarer's Compass-Lens proximity shimmer on undiscovered Echo Tablet III + subtle garment astrolabe directional arc + simultaneous HUD Imprint & Compass-Lens rows.
+  11. [`11-restart-confirmation-modal.png`](./11-restart-confirmation-modal.png)  -  **`L-5` verified:** `RESTART CHAPTER ONE?` confirmation modal (`Cancel (Keep Save)` focused by default).
 
 ---
 

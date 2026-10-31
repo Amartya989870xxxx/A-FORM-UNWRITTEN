@@ -1,70 +1,11 @@
 import type { ParallaxLayerDef, RegionDefinition } from '../types';
+import {
+  REGION_PRECIPICE,
+  VERGE_HIGHLANDS_PARALLAX_LAYERS,
+} from './vergeHighlands';
 
-export const SHATTERED_VERGE_PARALLAX_LAYERS: ParallaxLayerDef[] = [
-  {
-    id: 'shattered_verge_far',
-    textureKey: 'tex_parallax_far',
-    depth: 1,
-    scrollFactorX: 0.12,
-    scrollFactorY: 0,
-    alpha: 0.9,
-    baseY: 740,
-    height: 680,
-    tintBand: 'far',
-  },
-  {
-    id: 'shattered_verge_mid',
-    textureKey: 'tex_parallax_mid',
-    depth: 2,
-    scrollFactorX: 0.27,
-    scrollFactorY: 0,
-    alpha: 0.93,
-    baseY: 760,
-    height: 680,
-    tintBand: 'mid',
-  },
-  {
-    id: 'shattered_verge_near',
-    textureKey: 'tex_parallax_near',
-    depth: 3,
-    scrollFactorX: 0.48,
-    scrollFactorY: 0,
-    alpha: 0.96,
-    baseY: 780,
-    height: 700,
-    tintBand: 'near',
-  },
-];
-
-export const REGION_PRECIPICE: RegionDefinition = {
-  id: 'shattered_verge_precipice',
-  name: 'The Whispering Precipice',
-  biome: 'ancient_ruins',
-  bounds: { x: 0, y: 600, width: 1450, height: 500 },
-  lightingProfile: 'outdoor',
-  defaultTerrainSkin: 'ground',
-  platformSkinOverrides: {
-    p_z1_safety: 'floating',
-    p_z1_echo_ledge: 'floating',
-    p_shaft_step_1: 'sanctum',
-    p_shaft_step_2: 'sanctum',
-    p_shaft_step_3: 'sanctum',
-    p_shaft_wall_e: 'sanctum',
-  },
-  parallaxLayers: SHATTERED_VERGE_PARALLAX_LAYERS,
-  props: [
-    { id: 'prop_p1', x: 92, y: 840, kind: 'arch', scale: 1.0 },
-    { id: 'prop_p2', x: 185, y: 840, kind: 'brazier', scale: 1.0, hasLight: true },
-    { id: 'prop_p3', x: 350, y: 840, kind: 'pillar', scale: 0.92 },
-    { id: 'prop_p4', x: 700, y: 840, kind: 'statue', scale: 1.0 },
-    { id: 'prop_p5', x: 985, y: 840, kind: 'brazier', scale: 1.0, hasLight: true },
-  ],
-  mistPlacements: [
-    { x: 540, y: 900, scaleX: 1.8, scaleY: 1.15, alpha: 0.42, speed: 0.32, amp: 52, depth: 13 },
-    { x: 1295, y: 785, scaleX: 1.9, scaleY: 1.25, alpha: 0.46, speed: 0.4, amp: 44, depth: 13 },
-  ],
-  ambientParticleType: 'cyan',
-};
+export const SHATTERED_VERGE_PARALLAX_LAYERS: ParallaxLayerDef[] = VERGE_HIGHLANDS_PARALLAX_LAYERS;
+export { REGION_PRECIPICE };
 
 export const REGION_SPIRES: RegionDefinition = {
   id: 'shattered_verge_spires',

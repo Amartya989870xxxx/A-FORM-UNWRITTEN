@@ -38,6 +38,15 @@ This document records significant technical, gameplay, narrative, and visual eng
   * Implemented `isLegacyEnvironmentMode` (`?env=legacy`) allowing instant regression testing against the legacy inline rendering pipeline without duplicate game objects.
   * Utilized `import type Phaser from 'phaser'` across all environment modules to maintain Node testability in Vitest without requiring jsdom or triggering Phaser browser device detection.
 
+### 1.6 Illustrated Biome Architecture & Neutral Lighting Authoring (Phase 3)
+* **Problem:** Transitioning from geometric vector primitives to painted 2D illustration in Whispering Precipice (`x: 0..1500`) risked baked lighting conflicts with the real-time atmosphere system, collision misalignment, and asset bloat.
+* **Solution (`src/game/environment/regions/vergeHighlands.ts`, `src/assets/environments/verge_highlands/`):**
+  * **Neutral Daylight Authoring:** All illustrated backgrounds, props, and terrain skins authored under diffuse daylight (5500K-6000K). Sky regions and interior arch openings use full alpha transparency (`alpha = 0`), allowing `tex_sky_dynamic`, celestial bodies, and `LightingController` color grading overlays (`gradeOverlay` at depth 85) to dynamically tint all 6 atmospheric stages (Dawn, Morning, Day, Golden Hour, Sunset, Night) with zero visual dissonance.
+  * **Decoupled Platform Skinning with Sub-Pixel Alignment:** Collision boxes in `platformsGroup` remain 100% frozen as invisible Arcade Physics bodies. Platform skins (`terrain_highland_ground.png`, `terrain_stone_paving.png`, `terrain_rocky_outcrop.png`) are rendered as visual `TileSprite`s on depth 16 with origin `(0.5, 0)` placed at `p.x, p.y - p.height / 2`, ensuring walking surfaces meet player feet with exact sub-pixel parity.
+  * **High-Efficiency Asset Budget:** Total region asset size compressed to 1,327 KB (~1.33 MB), utilizing only 26.5% of the 5.0 MB maximum region budget.
+  * **Multi-Layer Parallax Framing:** Integrated `bg_highland_far` (snow peaks, cloud sea, Ring-Monolith, scroll 0.12), `bg_highland_mid` (aqueduct and waterfalls, scroll 0.27), `bg_highland_near` (ruined colonnade and ivy, scroll 0.48), and `fg_highland_overhang` (foreground ivy canopy at depth 66, scroll 1.08).
+  * **Interactive Environmental Props:** Added bronze wind chimes, limestone lanterns with real-time flickering point lights registered with `LightingController`, mossy statue fragment, and alpine wildflowers with sinusoidal wind sway.
+
 ---
 
 ## 2. Character Canon & Gameplay Redesign Decisions
