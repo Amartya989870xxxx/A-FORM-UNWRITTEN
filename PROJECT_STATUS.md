@@ -45,6 +45,26 @@
 - **Dedicated Settings Storage:** Atmosphere preferences persist independently in `auf_settings_v1` without risk to `SaveState` v2 (`auf_save_v1`).
 - **Live Screenshot Suite:** Captured at 1920x1080 across all 6 phases in `qa/environment/` (`01-dawn.png` through `06-night.png`).
 
+## 1.6 Reusable Region Environment Architecture (Phase 2 Implemented)
+
+- **Modular Environment Engine (`src/game/environment/`):**
+  - `types.ts`: Strict data contracts for `BiomeKind`, `RegionDefinition`, `ParallaxLayerDef`, `TerrainSkinId`, `PropPlacement`, `AtmosphereProfile`, and `LightingProfile`.
+  - `EnvironmentRenderer.ts`: Orchestrates decorative parallax layers, terrain skins, prop placer, atmosphere FX, and integration with `LightingController`.
+  - `ParallaxLayer.ts`: Modular TileSprite layers with individual depth, opacity, horizontal/vertical scroll factors, and lighting tint integration.
+  - `TerrainSkinner.ts`: Visual skinning surface renderer supporting 11 terrain skin types (`ground`, `floating`, `aqueduct`, `sanctum`, `grass`, `soil`, `limestone`, `stone_paving`, `rocky_outcrop`, `sand`, `underground_masonry`) rendered strictly over physics collision rectangles without altering physical bounds.
+  - `PropPlacer.ts`: Reusable environmental prop placement system handling both static ruin props and animated objects (braziers, waterfalls, swaying foliage).
+  - `AtmosphereFX.ts`: Reusable mist bands and particle emitters (cyan and gold ambient motes) with lighting controller registration.
+  - `EnvironmentZones.ts`: Continuous horizontal/vertical region weight blending across world coordinates with normalized transition weights summing to 1.0.
+  - `regions/shatteredVerge.ts`: Concrete regional data definition for The Shattered Verge mapping all 6 zones (Precipice, Wind-Spires, Sky-Arch, Crucible, Underwalk, Sanctum) with 27 props and 6 mist bands matching baseline exactly.
+- **GameScene Refactored:**
+  - Environmental rendering extracted out of `GameScene.ts` and delegated to `EnvironmentRenderer`.
+  - Physics collision rectangles, player management, NPC systems, quest logic, and puzzle objects remain directly in `GameScene.ts`.
+  - Full backward-compatible development fallback via `?env=legacy` query parameter.
+- **Verification & Parity:**
+  - Automated platform geometry snapshot test in `src/game/__tests__/environment.test.ts` verifying all 45 platforms preserve exact dimensions, coordinates, and styles.
+  - 12 Full HD (1920x1080) parity screenshots captured across 6 key viewports in `qa/phase2-parity/` verifying pixel-accurate parity between modular and legacy rendering modes.
+  - Full Playwright E2E verification (`npm run verify:e2e`) passing with zero errors.
+
 ---
 
 ## 2. Deferred / Future Chapter Scope

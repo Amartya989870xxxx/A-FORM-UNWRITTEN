@@ -36,9 +36,9 @@ export class LightingController {
 
   // Visual handles
   private readonly skyImage: Phaser.GameObjects.Image;
-  private readonly parallaxFar?: Phaser.GameObjects.TileSprite;
-  private readonly parallaxMid?: Phaser.GameObjects.TileSprite;
-  private readonly parallaxNear?: Phaser.GameObjects.TileSprite;
+  private parallaxFar?: Phaser.GameObjects.TileSprite;
+  private parallaxMid?: Phaser.GameObjects.TileSprite;
+  private parallaxNear?: Phaser.GameObjects.TileSprite;
   private readonly vignetteImage?: Phaser.GameObjects.Image;
 
   private starsImage!: Phaser.GameObjects.Image;
@@ -129,6 +129,17 @@ export class LightingController {
   public forcePhase(phase: AtmospherePhase | null): void {
     this.overridePhase = phase;
     this.recomputeAndApply(true);
+  }
+
+  public setParallaxLayers(
+    far?: Phaser.GameObjects.TileSprite,
+    mid?: Phaser.GameObjects.TileSprite,
+    near?: Phaser.GameObjects.TileSprite
+  ): void {
+    this.parallaxFar = far;
+    this.parallaxMid = mid;
+    this.parallaxNear = near;
+    this.recomputeAndApply(false);
   }
 
   public registerMistBand(sprite: Phaser.GameObjects.Image, baseAlpha: number): void {

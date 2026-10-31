@@ -29,6 +29,15 @@ This document records significant technical, gameplay, narrative, and visual eng
 ### 1.4 DOM-Free Pure Systems for Fast Vitest Verification
 * **Decision (`src/game/systems/`):** Core systems (`ExplorationManager`, `QuestManager`, `DialogueManager`, `RemnantManager`, `ImprintManager`, `SaveManager`) avoid runtime DOM/Canvas globals (`import type Phaser from 'phaser'` and `Math.hypot`), allowing `npm test` to execute all unit, migration, cartography, and source-wide punctuation audits in `< 400ms` in Node.
 
+### 1.5 Modular Environment Architecture & Platform Body Freeze (Phase 2)
+* **Problem:** Environmental rendering, platform skins, props, mist, and parallax positioning were concentrated inside `GameScene.ts`, creating tight coupling between game progression logic and visual rendering, hindering multi-biome expansion.
+* **Solution (`src/game/environment/`):**
+  * Created `EnvironmentRenderer` as an orchestrator managing `ParallaxLayer`, `TerrainSkinner`, `PropPlacer`, and `AtmosphereFX`.
+  * Preserved the immutable 45 platform colliders in `WORLD_PLATFORMS`, decoupling the visual skins drawn by `TerrainSkinner` from static Arcade Physics collision bodies.
+  * Separated decorative parallax layers (`scrollFactorX < 1.0`, `depth < 10`) from gameplay collision planes (`depth 16+`, `scrollFactorX = 1.0`).
+  * Implemented `isLegacyEnvironmentMode` (`?env=legacy`) allowing instant regression testing against the legacy inline rendering pipeline without duplicate game objects.
+  * Utilized `import type Phaser from 'phaser'` across all environment modules to maintain Node testability in Vitest without requiring jsdom or triggering Phaser browser device detection.
+
 ---
 
 ## 2. Character Canon & Gameplay Redesign Decisions

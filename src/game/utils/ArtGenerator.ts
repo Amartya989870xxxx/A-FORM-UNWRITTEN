@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH, PALETTE } from '../constants';
 
 export type PlatformVisualStyle = 'ground' | 'floating' | 'aqueduct' | 'sanctum';

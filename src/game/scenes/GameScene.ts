@@ -54,6 +54,7 @@ import { RestorationOverlay } from '../ui/RestorationOverlay';
 import { WorldMap } from '../ui/WorldMap';
 import { LightingController } from '../time/LightingController';
 import { ArtGenerator } from '../utils/ArtGenerator';
+import { EnvironmentRenderer } from '../environment/EnvironmentRenderer';
 
 export interface GameSceneInitData {
   loadSaved?: boolean;
@@ -66,9 +67,10 @@ export class GameScene extends Phaser.Scene {
   private uiObjects = new Set<Phaser.GameObjects.GameObject>();
   private uiIgnoredObjects = new WeakSet<Phaser.GameObjects.GameObject>();
 
-  private parallaxFar!: Phaser.GameObjects.TileSprite;
-  private parallaxMid!: Phaser.GameObjects.TileSprite;
-  private parallaxNear!: Phaser.GameObjects.TileSprite;
+  public environmentRenderer!: EnvironmentRenderer;
+  private parallaxFar?: Phaser.GameObjects.TileSprite;
+  private parallaxMid?: Phaser.GameObjects.TileSprite;
+  private parallaxNear?: Phaser.GameObjects.TileSprite;
   private skyImage!: Phaser.GameObjects.Image;
   public lightingController!: LightingController;
   private vignetteImage!: Phaser.GameObjects.Image;
@@ -173,6 +175,7 @@ export class GameScene extends Phaser.Scene {
 
     // Clean up custom scene event listeners on restart/shutdown
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.environmentRenderer?.destroy();
       this.events.removeAllListeners(GAME_EVENTS.QUEST_UPDATED);
       this.events.removeAllListeners(GAME_EVENTS.REMNANT_RESTORED);
       this.events.removeAllListeners(GAME_EVENTS.IMPRINT_ACQUIRED);
@@ -223,6 +226,10 @@ export class GameScene extends Phaser.Scene {
 
     // Configure physics & expanded world bounds
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT + 120);
+
+    this.environmentRenderer = new EnvironmentRenderer({
+      scene: this,
+    });
 
     this.buildBackdropAndAtmosphere();
     this.buildWorldGeometry();
@@ -305,149 +312,168 @@ export class GameScene extends Phaser.Scene {
       .setScale(invZoom)
       .setDepth(0);
 
-    this.parallaxFar = this.add
-      .tileSprite(
-        GAME_WIDTH / 2,
-        toCamScreenY(GAME_HEIGHT - 340),
-        GAME_WIDTH,
-        680,
-        'tex_parallax_far'
-      )
-      .setScrollFactor(0)
-      .setScale(invZoom)
-      .setDepth(1)
-      .setAlpha(0.9);
-
-    this.parallaxMid = this.add
-      .tileSprite(
-        GAME_WIDTH / 2,
-        toCamScreenY(GAME_HEIGHT - 320),
-        GAME_WIDTH,
-        680,
-        'tex_parallax_mid'
-      )
-      .setScrollFactor(0)
-      .setScale(invZoom)
-      .setDepth(2)
-      .setAlpha(0.93);
-
-    this.parallaxNear = this.add
-      .tileSprite(
-        GAME_WIDTH / 2,
-        toCamScreenY(GAME_HEIGHT - 300),
-        GAME_WIDTH,
-        700,
-        'tex_parallax_near'
-      )
-      .setScrollFactor(0)
-      .setScale(invZoom)
-      .setDepth(3)
-      .setAlpha(0.96);
-
     // Screen-edge atmospheric vignette (rendered on 1:1 UI camera)
     this.vignetteImage = this.add
       .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'tex_vignette')
       .setScrollFactor(0)
       .setDepth(90);
 
-    // Initialize real-time dynamic atmosphere & time-of-day controller
-    this.lightingController = new LightingController({
-      scene: this,
-      skyImage: this.skyImage,
-      parallaxFar: this.parallaxFar,
-      parallaxMid: this.parallaxMid,
-      parallaxNear: this.parallaxNear,
-      vignetteImage: this.vignetteImage,
-    });
+    if (this.environmentRenderer.isLegacyMode()) {
+      this.parallaxFar = this.add
+        .tileSprite(
+          GAME_WIDTH / 2,
+          toCamScreenY(GAME_HEIGHT - 340),
+          GAME_WIDTH,
+          680,
+          'tex_parallax_far'
+        )
+        .setScrollFactor(0)
+        .setScale(invZoom)
+        .setDepth(1)
+        .setAlpha(0.9);
 
-    // Volumetric 2.5D drifting valley mist bands
-    const mistPlacements = [
-      { x: 540, y: 900, scaleX: 1.8, scaleY: 1.15, alpha: 0.42, speed: 0.32, amp: 52, depth: 13 },
-      { x: 1295, y: 785, scaleX: 1.9, scaleY: 1.25, alpha: 0.46, speed: 0.4, amp: 44, depth: 13 },
-      { x: 2480, y: 585, scaleX: 2.2, scaleY: 1.2, alpha: 0.38, speed: 0.28, amp: 64, depth: 13 },
-      { x: 3680, y: 530, scaleX: 2.4, scaleY: 1.3, alpha: 0.48, speed: 0.36, amp: 70, depth: 13 },
-      { x: 4480, y: 558, scaleX: 1.9, scaleY: 1.1, alpha: 0.34, speed: 0.3, amp: 46, depth: 33 },
-      { x: 3550, y: 1142, scaleX: 2.5, scaleY: 1.15, alpha: 0.36, speed: 0.25, amp: 60, depth: 33 },
-    ];
-    for (const mp of mistPlacements) {
-      const sprite = this.add
-        .image(mp.x, mp.y, 'tex_mist_band')
-        .setScale(mp.scaleX, mp.scaleY)
-        .setAlpha(mp.alpha)
-        .setDepth(mp.depth);
-      this.mistBands.push({
-        sprite,
-        baseX: mp.x,
-        speed: mp.speed,
-        amp: mp.amp,
+      this.parallaxMid = this.add
+        .tileSprite(
+          GAME_WIDTH / 2,
+          toCamScreenY(GAME_HEIGHT - 320),
+          GAME_WIDTH,
+          680,
+          'tex_parallax_mid'
+        )
+        .setScrollFactor(0)
+        .setScale(invZoom)
+        .setDepth(2)
+        .setAlpha(0.93);
+
+      this.parallaxNear = this.add
+        .tileSprite(
+          GAME_WIDTH / 2,
+          toCamScreenY(GAME_HEIGHT - 300),
+          GAME_WIDTH,
+          700,
+          'tex_parallax_near'
+        )
+        .setScrollFactor(0)
+        .setScale(invZoom)
+        .setDepth(3)
+        .setAlpha(0.96);
+
+      // Initialize real-time dynamic atmosphere & time-of-day controller
+      this.lightingController = new LightingController({
+        scene: this,
+        skyImage: this.skyImage,
+        parallaxFar: this.parallaxFar,
+        parallaxMid: this.parallaxMid,
+        parallaxNear: this.parallaxNear,
+        vignetteImage: this.vignetteImage,
       });
-      this.lightingController.registerMistBand(sprite, mp.alpha);
+
+      // Volumetric 2.5D drifting valley mist bands
+      const mistPlacements = [
+        { x: 540, y: 900, scaleX: 1.8, scaleY: 1.15, alpha: 0.42, speed: 0.32, amp: 52, depth: 13 },
+        { x: 1295, y: 785, scaleX: 1.9, scaleY: 1.25, alpha: 0.46, speed: 0.4, amp: 44, depth: 13 },
+        { x: 2480, y: 585, scaleX: 2.2, scaleY: 1.2, alpha: 0.38, speed: 0.28, amp: 64, depth: 13 },
+        { x: 3680, y: 530, scaleX: 2.4, scaleY: 1.3, alpha: 0.48, speed: 0.36, amp: 70, depth: 13 },
+        { x: 4480, y: 558, scaleX: 1.9, scaleY: 1.1, alpha: 0.34, speed: 0.3, amp: 46, depth: 33 },
+        { x: 3550, y: 1142, scaleX: 2.5, scaleY: 1.15, alpha: 0.36, speed: 0.25, amp: 60, depth: 33 },
+      ];
+      for (const mp of mistPlacements) {
+        const sprite = this.add
+          .image(mp.x, mp.y, 'tex_mist_band')
+          .setScale(mp.scaleX, mp.scaleY)
+          .setAlpha(mp.alpha)
+          .setDepth(mp.depth);
+        this.mistBands.push({
+          sprite,
+          baseX: mp.x,
+          speed: mp.speed,
+          amp: mp.amp,
+        });
+        this.lightingController.registerMistBand(sprite, mp.alpha);
+      }
+
+      // Subtle world-space ambient motes across the Shattered Verge
+      this.add
+        .particles(0, 0, 'tex_mote_cyan', {
+          x: { min: 60, max: WORLD_WIDTH - 100 },
+          y: { min: 180, max: WORLD_HEIGHT - 80 },
+          speedY: { min: -22, max: -6 },
+          speedX: { min: -12, max: 12 },
+          scale: { start: 0.34, end: 0 },
+          alpha: { start: 0.34, end: 0 },
+          lifespan: 5400,
+          frequency: 105,
+          blendMode: 'ADD',
+        })
+        .setDepth(12);
+
+      // Warm bioluminescent & brazier embers in the Crucible and Sunken Sanctum
+      this.add
+        .particles(0, 0, 'tex_mote_gold', {
+          x: { min: 1400, max: WORLD_WIDTH - 140 },
+          y: { min: 320, max: 1160 },
+          speedY: { min: -20, max: -5 },
+          speedX: { min: -8, max: 8 },
+          scale: { start: 0.36, end: 0 },
+          alpha: { start: 0.4, end: 0 },
+          lifespan: 4800,
+          frequency: 120,
+          blendMode: 'ADD',
+        })
+        .setDepth(12);
+    } else {
+      this.lightingController = new LightingController({
+        scene: this,
+        skyImage: this.skyImage,
+        vignetteImage: this.vignetteImage,
+      });
+      this.environmentRenderer.setLightingController(this.lightingController);
     }
-
-    // Subtle world-space ambient motes across the Shattered Verge
-    this.add
-      .particles(0, 0, 'tex_mote_cyan', {
-        x: { min: 60, max: WORLD_WIDTH - 100 },
-        y: { min: 180, max: WORLD_HEIGHT - 80 },
-        speedY: { min: -22, max: -6 },
-        speedX: { min: -12, max: 12 },
-        scale: { start: 0.34, end: 0 },
-        alpha: { start: 0.34, end: 0 },
-        lifespan: 5400,
-        frequency: 105,
-        blendMode: 'ADD',
-      })
-      .setDepth(12);
-
-    // Warm bioluminescent & brazier embers in the Crucible and Sunken Sanctum
-    this.add
-      .particles(0, 0, 'tex_mote_gold', {
-        x: { min: 1400, max: WORLD_WIDTH - 140 },
-        y: { min: 320, max: 1160 },
-        speedY: { min: -20, max: -5 },
-        speedX: { min: -8, max: 8 },
-        scale: { start: 0.36, end: 0 },
-        alpha: { start: 0.4, end: 0 },
-        lifespan: 4800,
-        frequency: 120,
-        blendMode: 'ADD',
-      })
-      .setDepth(12);
   }
 
   private buildWorldGeometry(): void {
-    const propsGfx = this.add.graphics().setDepth(10);
-    for (const prop of WORLD_PROPS) {
-      this.drawStaticRuinProp(propsGfx, prop.x, prop.y, prop.kind, prop.scale ?? 1);
-      if (prop.kind === 'brazier' || prop.kind === 'waterfall') {
-        this.animatedProps.push(prop);
+    if (this.environmentRenderer.isLegacyMode()) {
+      const propsGfx = this.add.graphics().setDepth(10);
+      for (const prop of WORLD_PROPS) {
+        this.drawStaticRuinProp(propsGfx, prop.x, prop.y, prop.kind, prop.scale ?? 1);
+        if (prop.kind === 'brazier' || prop.kind === 'waterfall') {
+          this.animatedProps.push(prop);
+        }
+        if (prop.kind === 'brazier') {
+          const s = prop.scale ?? 1;
+          this.lightingController.registerLocalLight({
+            x: prop.x,
+            y: prop.y - 32 * s,
+            baseRadius: 115 * s,
+            baseIntensity: 0.85,
+            flickerSpeed: 3.2,
+          });
+          this.add
+            .particles(prop.x, prop.y - 38 * s, 'tex_mote_amber', {
+              x: { min: -7, max: 7 },
+              y: { min: -4, max: 4 },
+              speedY: { min: -44, max: -16 },
+              speedX: { min: -10, max: 10 },
+              scale: { start: 0.3, end: 0 },
+              alpha: { start: 0.72, end: 0 },
+              lifespan: 950,
+              frequency: 165,
+              blendMode: 'ADD',
+            })
+            .setDepth(14);
+        }
       }
-      if (prop.kind === 'brazier') {
-        const s = prop.scale ?? 1;
-        this.lightingController.registerLocalLight({
-          x: prop.x,
-          y: prop.y - 32 * s,
-          baseRadius: 115 * s,
-          baseIntensity: 0.85,
-          flickerSpeed: 3.2,
-        });
-        this.add
-          .particles(prop.x, prop.y - 38 * s, 'tex_mote_amber', {
-            x: { min: -7, max: 7 },
-            y: { min: -4, max: 4 },
-            speedY: { min: -44, max: -16 },
-            speedX: { min: -10, max: 10 },
-            scale: { start: 0.3, end: 0 },
-            alpha: { start: 0.72, end: 0 },
-            lifespan: 950,
-            frequency: 165,
-            blendMode: 'ADD',
-          })
-          .setDepth(14);
+
+      this.animatedPropsGfx = this.add.graphics().setDepth(13);
+
+      const platGfx = this.add.graphics().setDepth(16);
+      for (const p of WORLD_PLATFORMS) {
+        ArtGenerator.drawCarvedPlatform(platGfx, p.x, p.y, p.width, p.height, p.style);
       }
+    } else {
+      this.environmentRenderer.init(WORLD_PLATFORMS, FOREGROUND_SILHOUETTES);
     }
 
-    this.animatedPropsGfx = this.add.graphics().setDepth(13);
     this.conduitLinesGfx = this.add.graphics().setDepth(11);
     this.compassGfx = this.add.graphics().setDepth(31);
 
@@ -488,11 +514,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     // 2.5D bevelled stone platforms + static Arcade Physics colliders
-    const platGfx = this.add.graphics().setDepth(16);
     this.platformsGroup = this.physics.add.staticGroup();
 
     for (const p of WORLD_PLATFORMS) {
-      ArtGenerator.drawCarvedPlatform(platGfx, p.x, p.y, p.width, p.height, p.style);
       const block = this.platformsGroup.create(p.x, p.y, 'tex_pixel') as Phaser.Physics.Arcade.Sprite;
       block.setAlpha(0);
       block.setDisplaySize(p.width, p.height);
@@ -501,6 +525,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildForegroundDepthLayer(): void {
+    if (!this.environmentRenderer.isLegacyMode()) {
+      return;
+    }
     // Foreground 2.5D occluder silhouettes (scrollFactorX 1.14, placed away from platforms & puzzles)
     const fg = this.add.graphics().setDepth(65).setScrollFactor(1.14, 1).setAlpha(0.46);
     for (const item of FOREGROUND_SILHOUETTES) {
@@ -1974,19 +2001,25 @@ export class GameScene extends Phaser.Scene {
       this.blockTouchToastCooldownMs -= delta;
     }
 
-    const t = time * 0.001;
     const cam = this.cameras.main;
-    this.parallaxFar.tilePositionX = cam.scrollX * 0.12;
-    this.parallaxMid.tilePositionX = cam.scrollX * 0.27;
-    this.parallaxNear.tilePositionX = cam.scrollX * 0.48;
 
-    for (let i = 0; i < this.mistBands.length; i++) {
-      const mb = this.mistBands[i];
-      mb.sprite.x = mb.baseX + Math.sin(t * mb.speed + i * 1.4) * mb.amp;
+    if (this.environmentRenderer.isLegacyMode()) {
+      const t = time * 0.001;
+      if (this.parallaxFar) this.parallaxFar.tilePositionX = cam.scrollX * 0.12;
+      if (this.parallaxMid) this.parallaxMid.tilePositionX = cam.scrollX * 0.27;
+      if (this.parallaxNear) this.parallaxNear.tilePositionX = cam.scrollX * 0.48;
+
+      for (let i = 0; i < this.mistBands.length; i++) {
+        const mb = this.mistBands[i];
+        mb.sprite.x = mb.baseX + Math.sin(t * mb.speed + i * 1.4) * mb.amp;
+      }
+
+      this.renderAnimatedWorldProps(time);
+    } else {
+      this.environmentRenderer.update(time, delta, cam);
     }
 
     this.lightingController.update(time, delta);
-    this.renderAnimatedWorldProps(time);
 
     // Global audio toggle
     if (Phaser.Input.Keyboard.JustDown(this.keyM)) {

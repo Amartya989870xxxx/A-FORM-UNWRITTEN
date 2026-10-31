@@ -2,7 +2,7 @@
   "name": "a-form-unwritten",
   "private": true,
   "version": "0.1.0",
-  "description": "A Form Unwritten — An atmospheric 2D dark-fantasy adventure vertical slice built with Phaser 3 and TypeScript.",
+  "description": "A Form Unwritten: An atmospheric 2D dark-fantasy adventure vertical slice built with Phaser 3 and TypeScript.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "verify:e2e": "npm run build && node scripts/verify-gameplay.mjs",
-    "capture:atmosphere": "node scripts/capture-atmosphere-screenshots.mjs"
+    "capture:atmosphere": "node scripts/capture-atmosphere-screenshots.mjs",
+    "capture:parity": "node scripts/capture-phase2-parity.mjs"
   },
   "dependencies": {
     "phaser": "^3.88.2"
