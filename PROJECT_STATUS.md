@@ -1,53 +1,55 @@
-# PROJECT STATUS — A FORM UNWRITTEN
+# PROJECT STATUS: A FORM UNWRITTEN
 
 **Last Updated:** 2026-10-31  
-**Current Milestone:** Milestone 7 Completed (Playable Vertical Slice — Chapters 0 through 5)
+**Current Milestone:** Chapter One Release-Ready (*The Shattered Verge* Full HD RPG Foundation + All Release Audit Fixes Verified)
 
 ---
 
 ## 1. Completed Features
 
-- [x] **Milestone 1 — Foundation & Scenes:** Vite + TypeScript + Phaser 3 setup, responsive `16:9` viewport (`100dvw` / `100dvh`, forced dark color-scheme), `BootScene`, `MenuScene`, `AwakeningScene`, `GameScene`, and `EndingScene`.
-- [x] **Milestone 2 — Dual-State Player Controller (`src/game/entities/Player.ts`):**
-  - Responsive 2D Arcade Physics movement with acceleration/drag curves, `115ms` coyote time, `125ms` jump buffering, and variable jump height.
-  - *Unbound Form (Pre-Weight):* Low gravity (`620`), slow-descent midair **Float** (`Hold Space`), and upward thermal lift inside `WindUpdraft` columns.
-  - *Grounded Vessel (Post-Weight):* Grounded gravity (`1180`), floating and wind-lift disabled, **Ground Impact** plunge (`S / Down + Space` in midair), heavy block pushing, and pressure plate activation.
-  - Distinct 60 FPS procedural vector/particle animations for both forms (drifting incomplete shadow-shards & cyan wisps -> solid obsidian-slate humanoid with articulated striding legs, flowing cloak, and kintsugi-gold chest seams).
-- [x] **Milestone 3 — *The Shattered Verge* Environment (`src/game/data/world.ts`):**
-  - 5 interconnected zones across a `4700 x 1360` world with 3-layer seamless parallax ruins + twilight starfield/fractured celestial ring, carved masonry platforms, glowing conduit traces, diegetic rune tutorials, and immortal safe-ledge reformation.
-- [x] **Milestone 4 — Narrative, Quests & Puzzle 1:**
-  - `QuestManager` (`NOT_STARTED` / `ACTIVE` / `COMPLETED`) driving 3 chained quests (`Whispers of the Verge`, `Echoes of Substance`, `The Weight of Becoming`) + 3 optional hidden **Echo Tablets**.
-  - `DialogueManager` & `DialogueBox` supporting typewriter reveal, conditional dialogue branches, keyboard/mouse choice selection, and quest/imprint triggers.
-  - **Oren, the Hollow Chronicler** (with distinct pre-Weight and post-Weight dialogue) and **Puzzle 1 (Wind-Spire Conduit Alignment)**.
-- [x] **Milestone 5 — Remnant of Weight Restoration:**
-  - Single-trigger restoration ceremony with camera zoom, spiraling golden fragments, sub-bass/harmonic audio transition, permanent form & physics switch, and `RestorationOverlay` detailing gained vs. surrendered capabilities.
-- [x] **Milestone 6 — Post-Restoration Loop, Puzzle 2, First Choice & Ending:**
-  - Ground Impact descent through `slab_crucible` into the Return Gallery back to Zone 1's Courtyard.
-  - Courtyard dual counterweight unsealing (`HeavyBlock` + `PressurePlate` pair) + **Puzzle 2 (Sunken Causeway Calcified Vault & Counterweight Chamber)**.
-  - **Vespera, the Bound Warden** encounter & philosophical choice awarding **Imprint of Resonance** (*Becoming*) or **Imprint of Resolve** (*Original Self*).
-  - **Fractured Mirror-Arch** mystery hook and `EndingScene` summary + clean replay/restart.
-- [x] **Milestone 7 — UI, Audio, Persistence & Verification:**
-  - Minimalist `HUD`, two-column `Journal` (`[J]`), `PauseMenu` (`[Esc]`), procedural Web Audio synthesizer (`AudioManager`), schema-validated `SaveManager` with corrupted JSON recovery, Vitest unit suite (`src/game/__tests__/systems.test.ts`), and Playwright Chrome E2E verification (`scripts/verify-gameplay.mjs`).
+- [x] **Engine & Core Systems Preserved:** Phaser 3 + TypeScript + Vite architecture maintained with responsive movement, coyote time, jump buffering, Web Audio synthesis (`AudioManager`), branching dialogue (`DialogueManager`), and non-combat exploration focus.
+- [x] **Canonical Stabilizing Garment Protagonist (`src/game/entities/Player.ts`):**
+  - Bodiless immortal presence rendered exclusively through the layered charcoal and dark-ash **Stabilizing Garment** with parchment-ash inner mantle lining, swept silver-ash crest folds concealing a dark void face, antique gold waist-ring clasp, cloth-wrapped boots, and kintsugi-gold seams.
+  - Zero exposed human skin, eyes, or cyan astral humanoid body in gameplay; higher beings (such as Vespera) reference the unsettled multicolored astral prism beneath the seams while keeping the garment's origin an unresolved mystery.
+  - Multi-segment physics-driven mantle with teleport/respawn snap protection, airborne glider spread in **Unanchored State**, and heavier grounded stride + Ground Impact shockwave in **Grounded State**.
+- [x] **Player Naming & SaveState v2 (`src/game/ui/NamePrompt.ts`, `src/game/systems/SaveManager.ts`):**
+  - Native accessible HTML `<dialog id="name-dialog">` modal on *Begin Journey* (defaulting to `'The Unwritten'`), reflected in HUD, World Atlas, Chronicle, Pause Menu, NPC dialogue, and Chapter One ending, plus Cancel/Confirm confirmation dialogues (`src/game/ui/ConfirmModal.ts`) guarding *Begin New Journey*, *Restart Chapter One*, and *Replay Chapter One* against accidental save deletion.
+  - `SaveState` upgraded to `version: 2` (persisting `playerName`, `adventurerRank`, `discoveredCells`, `discoveredLocations`, `relics`, `soulAffinities`, `blackOrbUsedCount`, and `garmentOriginMystery: 'unresolved'`) with hardened pre-Weight (`Rank G`, safe Sky-Arch placement) and post-Weight (`Rank F`, reconciled Crucible flags) `v1 -> v2` migration and non-destructive fallback recovery.
+- [x] **Expanded Quest Arc & Optional Hidden Quest (`src/game/data/quests.ts`, `src/game/scenes/GameScene.ts`):**
+  - Remnant of Weight is caged behind three concentric containment rings and **cannot be claimed early**; interacting once uncaged presents an explicit pre-stabilization confirmation modal warning that Unanchored Drift and wind ascent will be surrendered, while **Grounded Counterweight Lifts** awaken post-Weight so optional high-spire Echo Tablets and upper fog cells remain revisitable.
+  - `Echoes of Substance` expanded into a 6-stage investigation across the **Surveyor Stele**, **Twin Wind-Spires**, **Shattered Sky-Arch** (*Aerial Resonance Bell*), and **Crucible of Mass 3-Lock Dome Puzzle** (*West Lever*, *East Harmonic Dial*, ignited central dome updraft, and *Zenith Cupola Keystone*), with coherent Oren-bypass quest self-healing in `QuestManager`.
+  - Added optional Rank `F` (`1,000-Year Mystery`) Hidden Quest **Threads of the Silent Loom** (`hq_silent_loom`): recovering the *Frayed Gold Spool* (western Precipice) and *Astral Weaver Spindle* (Echoing Underwalk) unlocks the *Sealed Reliquary Loom* (Sunken Sanctum), awarding the Rare Relic **Wayfarer's Compass-Lens** (`+45%` map reveal radius plus subtle proximity shimmer and directional astrolabe arc for nearby undiscovered inscriptions within `480px`) and `+4 Silver` Soul Affinity.
+  - Orthogonal **Adventurer Rank (`G` to `S`)** and **Mystery Age** labels displayed across HUD and Chronicle, with simultaneous non-overlapping HUD rows for active Imprint and equipped Compass-Lens relic.
+- [x] **Interactive Cartographic World Atlas (`src/game/ui/WorldMap.ts`, `src/game/systems/ExplorationManager.ts`):**
+  - Accessible via `[Tab]`, Chronicle button, and Pause Menu.
+  - **Regional Survey:** Live `28 x 8` uniform opaque dark-mist fog-of-war grid across *The Shattered Verge* (with zero unexplored room silhouettes or route-line bleed), `10` discoverable landmarks with lore notes, and pulsing player pin.
+  - **World Continents:** Four sculpted known continents (*Aethelgard & The Crown Reaches*, *Aurelia of the Ivory Spires*, *The Solis Aridlands*, *The Sylphic Marches* totaling `18` known regions) plus a fifth far-eastern landmass veiled in dynamic black-violet tempest mist (`totalRegions: 0`, excluded from standard Known World percentages).
+- [x] **Full HD `1920 x 1080` Cinematic 2.5D Upgrade, Clean Packaging & Responsive Centering:**
+  - Upgraded viewport to `1920 x 1080` (`WORLD_CAMERA_ZOOM = 1.42` for gameplay + `1:1` native `UICamera` for razor-sharp UI typography), verified with exact `1:1` symmetric centering across `16:9`, `21:9`, `16:10`, and `4:3` viewports (`1920x1080`, `1366x768`, `2560x1080`, `1440x900`, `1024x768`, `800x500`).
+  - Moved reference concept sheets out of `public/` into `design-references/` at repository root, shrinking `dist/` production output from `14 MB` to `1.6 MB` while preserving all original reference artwork in Git.
+  - Layered 2.5D bevelled stone platforms, Broken Ring-Monolith horizon, flickering warm braziers, animated waterfalls, non-occluding foreground parallax silhouettes, non-overlapping top-sky zone banners, and Chapter One conclusion framing (`EndingScene.ts`).
+  - Removed all Unicode em dashes (`U+2014`) and en dashes (`U+2013`) across all game source files and HTML, enforced via automated `12`-test Vitest suite and expanded Full HD Playwright E2E verification.
+- [x] **Worldbuilding, Quest Architecture & Release Audit Documentation:**
+  - Authored [`WORLD_BIBLE.md`](./WORLD_BIBLE.md), [`QUEST_DESIGN.md`](./QUEST_DESIGN.md), and [`qa/release-readiness/RELEASE_READINESS_AUDIT.md`](./qa/release-readiness/RELEASE_READINESS_AUDIT.md).
 
 ---
 
-## 2. Incomplete / Deferred Features (Beyond MVP Scope)
+## 2. Deferred / Future Chapter Scope
 
-- **Custom Key Remapping UI:** Controls currently use sensible desktop defaults (`A/D` + Arrow keys, `Space`, `S+Space`, `E`, `J`, `M`, `Esc`); runtime keybind remapping is deferred to post-vertical-slice polish.
-- **Hand-Illustrated Final Sprite/Audio Assets:** Visuals and audio currently use cohesive custom procedural canvas textures, dynamic vector/particle rendering, and Web Audio synthesis (see `DECISIONS.md` for asset replacement paths).
-- **Future Regions & Remnants:** *The Forgotten Kingdom*, *The Realm of Echoes*, and *The Silent Expanse*—along with the Remnants of *Reflection*, *Voice*, *Memory*, *Emotion*, and *Form*—are planned for subsequent chapters.
+- **Chapter Two Region (*Ashenweld Frontier & Highcrown Citadel*):** Crossing the Fractured Mirror-Arch currently concludes Chapter One and saves completion state; physical traversal of Aethelgard's interior towns and first Adventurers' Guild Charter Hall begins in Chapter Two.
+- **Playable Companion Recruitment & Black Orb Encounters:** Data models (`soulAffinities`, `blackOrbUsedCount`) and narrative hooks are in place; active companion traversal puzzles (*Lyra of the Brass Astrolabe*) and the first optional Black Orb anomaly are scheduled for Chapters Two and Three.
+- **Runtime Keybind Remapping UI:** Desktop keyboard + mouse defaults are supported across all menus; customizable keybind remapping remains a future QoL addition.
 
 ---
 
 ## 3. Known Bugs
 
-- None currently open. Automated unit tests and headless Chrome E2E verification confirm movement, float, updrafts, dialogue, quest chaining, single-trigger Weight restoration, float disabling, Ground Impact slab shattering, heavy block pushing, pressure plate activation, Imprint choice, LocalStorage save/reload, corruption recovery, ending reachability, and zero console/network errors.
+- None currently open. Vitest unit tests (`npm test`) and Full HD `1920 x 1080` Playwright headless Chrome verification (`npm run verify:e2e`) pass with zero console errors, zero uncaught exceptions, and zero failed network requests.
 
 ---
 
-## 4. Exact Next Implementation Tasks (For Next Session / Chapter II Expansion)
+## 4. Next Implementation Steps (Chapter Two Kickoff)
 
-1. **Control Remapping Panel:** Extract input bindings in `GameScene.ts` into an `InputBindingManager` persisted to `localStorage` and expose a remapping tab inside `PauseMenu.ts` and `MenuScene.ts`.
-2. **Bespoke Sprite & Audio Asset Drop-in Support:** Add optional sprite-sheet and `.ogg/.mp3` asset manifest loading in `BootScene.ts` (`src/assets/sprites/`, `src/assets/images/`, `src/assets/audio/`) while retaining `ArtGenerator` and `AudioManager` fallbacks.
-3. **Region 2 Prototype (*The Forgotten Kingdom* — Remnant of Reflection):** Design the mirror-plane traversal mechanic where restoring *Reflection* reveals submerged/mirrored architecture while altering shadow-passthrough interactions.
-
+1. **Ashenweld Frontier Hub & Guild Charter Hall:** Implement the Chapter Two arrival scene beyond the Fractured Mirror-Arch, featuring formal Rank `F -> E` Guild registration and Relic appraisal.
+2. **First Companion (*Lyra*) Co-Op Environmental Puzzles:** Introduce dual-bell harmonic aqueduct puzzles in *Vaelen Sky-Aqueducts* where Lyra holds resonance nodes on player signal.
+3. **Multi-Arc Seed II (*Cartography of the Black Tempest*):** Add the first censored eastern mariner log anomaly connecting Chapter One's *Wayfarer's Compass-Lens* to Aurelia's Ivory Cartographers.

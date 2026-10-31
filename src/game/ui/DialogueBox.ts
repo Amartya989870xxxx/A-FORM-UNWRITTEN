@@ -22,48 +22,48 @@ export class DialogueBox {
   private currentChoices: DialogueChoice[] = [];
   private onCloseCallback?: () => void;
 
-  private readonly boxW = 840;
-  private readonly boxH = 215;
+  private readonly boxW = 1100;
+  private readonly boxH = 270;
 
   constructor(scene: Phaser.Scene, manager: DialogueManager) {
     this.scene = scene;
     this.manager = manager;
 
     const cx = GAME_WIDTH / 2;
-    const cy = GAME_HEIGHT - 152;
+    const cy = GAME_HEIGHT - 190;
 
     this.panelGfx = scene.add.graphics();
-    this.speakerText = scene.add.text(-this.boxW / 2 + 28, -this.boxH / 2 + 18, '', {
+    this.speakerText = scene.add.text(-this.boxW / 2 + 36, -this.boxH / 2 + 22, '', {
       fontFamily: 'Georgia, serif',
-      fontSize: '18px',
+      fontSize: '21px',
       fontStyle: 'bold',
       color: PALETTE.TEXT_GOLD,
     });
 
-    this.titleText = scene.add.text(-this.boxW / 2 + 115, -this.boxH / 2 + 21, '', {
+    this.titleText = scene.add.text(-this.boxW / 2 + 140, -this.boxH / 2 + 25, '', {
       fontFamily: 'Georgia, serif',
-      fontSize: '13px',
+      fontSize: '15px',
       fontStyle: 'italic',
       color: PALETTE.TEXT_MUTED,
     });
 
-    this.bodyText = scene.add.text(-this.boxW / 2 + 28, -this.boxH / 2 + 52, '', {
+    this.bodyText = scene.add.text(-this.boxW / 2 + 36, -this.boxH / 2 + 64, '', {
       fontFamily: 'Georgia, serif',
-      fontSize: '15.5px',
+      fontSize: '18px',
       color: PALETTE.TEXT_LIGHT,
-      lineSpacing: 6,
-      wordWrap: { width: this.boxW - 56 },
+      lineSpacing: 7,
+      wordWrap: { width: this.boxW - 72 },
     });
 
     this.continueHint = scene.add
-      .text(this.boxW / 2 - 26, this.boxH / 2 - 20, '[SPACE / E] Continue ▾', {
+      .text(this.boxW / 2 - 34, this.boxH / 2 - 28, '[SPACE / E] Continue ▾', {
         fontFamily: 'Georgia, serif',
-        fontSize: '12px',
+        fontSize: '14px',
         color: PALETTE.TEXT_CYAN,
       })
       .setOrigin(1, 0.5);
 
-    this.choiceContainer = scene.add.container(0, 22);
+    this.choiceContainer = scene.add.container(0, 26);
 
     this.container = scene.add
       .container(cx, cy, [
@@ -77,6 +77,10 @@ export class DialogueBox {
       .setScrollFactor(0)
       .setDepth(130)
       .setVisible(false);
+  }
+
+  public getRootObjects(): Phaser.GameObjects.GameObject[] {
+    return [this.container];
   }
 
   public isVisible(): boolean {
@@ -97,8 +101,8 @@ export class DialogueBox {
     }
 
     this.speakerText.setText(node.speaker);
-    this.titleText.setPosition(-this.boxW / 2 + 38 + this.speakerText.width, -this.boxH / 2 + 21);
-    this.titleText.setText(node.speakerTitle ? `— ${node.speakerTitle}` : '');
+    this.titleText.setPosition(-this.boxW / 2 + 50 + this.speakerText.width, -this.boxH / 2 + 25);
+    this.titleText.setText(node.speakerTitle ? `•  ${node.speakerTitle}` : '');
 
     this.fullText = this.manager.getResolvedText();
     this.revealedChars = 0;
@@ -111,21 +115,20 @@ export class DialogueBox {
     this.choiceContainer.removeAll(true);
     this.continueHint.setVisible(false);
 
-    this.drawPanel(this.currentChoices.length > 0 ? 245 : 190);
+    this.drawPanel(this.currentChoices.length > 0 ? 310 : 235);
   }
 
   private drawPanel(height: number): void {
     this.panelGfx.clear();
     this.panelGfx.fillStyle(PALETTE.UI_BG, 0.985);
-    this.panelGfx.fillRoundedRect(-this.boxW / 2, -this.boxH / 2, this.boxW, height, 10);
-    this.panelGfx.lineStyle(1.6, PALETTE.REMNANT_GOLD, 0.78);
-    this.panelGfx.strokeRoundedRect(-this.boxW / 2, -this.boxH / 2, this.boxW, height, 10);
+    this.panelGfx.fillRoundedRect(-this.boxW / 2, -this.boxH / 2, this.boxW, height, 12);
+    this.panelGfx.lineStyle(1.8, PALETTE.REMNANT_GOLD, 0.82);
+    this.panelGfx.strokeRoundedRect(-this.boxW / 2, -this.boxH / 2, this.boxW, height, 12);
 
-    // Subtle divider under speaker header
-    this.panelGfx.lineStyle(1, PALETTE.STONE_HIGHLIGHT, 0.4);
+    this.panelGfx.lineStyle(1, PALETTE.STONE_HIGHLIGHT, 0.42);
     this.panelGfx.beginPath();
-    this.panelGfx.moveTo(-this.boxW / 2 + 26, -this.boxH / 2 + 44);
-    this.panelGfx.lineTo(this.boxW / 2 - 26, -this.boxH / 2 + 44);
+    this.panelGfx.moveTo(-this.boxW / 2 + 34, -this.boxH / 2 + 54);
+    this.panelGfx.lineTo(this.boxW / 2 - 34, -this.boxH / 2 + 54);
     this.panelGfx.strokePath();
   }
 
@@ -134,9 +137,9 @@ export class DialogueBox {
 
     if (!this.typingComplete) {
       this.charAccumMs += delta;
-      const charsToAdd = Math.floor(this.charAccumMs / 16);
+      const charsToAdd = Math.floor(this.charAccumMs / 15);
       if (charsToAdd > 0) {
-        this.charAccumMs %= 16;
+        this.charAccumMs %= 15;
         const prev = this.revealedChars;
         this.revealedChars = Math.min(this.fullText.length, this.revealedChars + charsToAdd);
         this.bodyText.setText(this.fullText.slice(0, this.revealedChars));
@@ -209,13 +212,13 @@ export class DialogueBox {
 
   private rebuildChoices(): void {
     this.choiceContainer.removeAll(true);
-    const startY = 12;
-    const rowH = 38;
+    const startY = 20;
+    const rowH = 44;
 
     this.currentChoices.forEach((choice, idx) => {
       const selected = idx === this.selectedChoiceIndex;
-      const y = startY + idx * (rowH + 7);
-      const w = this.boxW - 56;
+      const y = startY + idx * (rowH + 9);
+      const w = this.boxW - 72;
 
       const bg = this.scene.add.graphics();
       const borderColor =
@@ -228,9 +231,9 @@ export class DialogueBox {
               : PALETTE.STONE_HIGHLIGHT;
 
       bg.fillStyle(selected ? 0x1b2442 : 0x10162a, 0.96);
-      bg.fillRoundedRect(-w / 2, y - rowH / 2, w, rowH, 6);
-      bg.lineStyle(selected ? 1.8 : 1, borderColor, selected ? 0.98 : 0.55);
-      bg.strokeRoundedRect(-w / 2, y - rowH / 2, w, rowH, 6);
+      bg.fillRoundedRect(-w / 2, y - rowH / 2, w, rowH, 7);
+      bg.lineStyle(selected ? 2 : 1.1, borderColor, selected ? 0.98 : 0.55);
+      bg.strokeRoundedRect(-w / 2, y - rowH / 2, w, rowH, 7);
 
       const labelColor =
         choice.accent === 'becoming'
@@ -242,9 +245,9 @@ export class DialogueBox {
               : PALETTE.TEXT_LIGHT;
 
       const txt = this.scene.add
-        .text(-w / 2 + 16, y, `${selected ? '◆' : '◇'}  ${idx + 1}. ${choice.label}`, {
+        .text(-w / 2 + 20, y, `${selected ? '◆' : '◇'}  ${idx + 1}. ${choice.label}`, {
           fontFamily: 'Georgia, serif',
-          fontSize: '14px',
+          fontSize: '16px',
           color: labelColor,
         })
         .setOrigin(0, 0.5);
@@ -275,4 +278,3 @@ export class DialogueBox {
     cb?.();
   }
 }
-

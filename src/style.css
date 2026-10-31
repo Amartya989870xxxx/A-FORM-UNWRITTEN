@@ -2,9 +2,13 @@
   color-scheme: only dark;
   --bg-void: #070913;
   --bg-frame: #0b0e1a;
-  --text-primary: #e6ebf8;
+  --bg-dialog: #111629;
+  --bg-input: #0a0e1c;
+  --text-primary: #edf1fc;
+  --text-muted: #9ca9c9;
   --accent-cyan: #7ee8fa;
-  --accent-amber: #e8a948;
+  --accent-amber: #e6ac4c;
+  --border-gold: rgba(230, 172, 76, 0.55);
 
   background-color: var(--bg-void);
   color: var(--text-primary);
@@ -35,28 +39,174 @@ body {
 #game-shell {
   width: 100dvw;
   height: 100dvh;
-  display: grid;
-  place-items: center;
+  position: relative;
+  overflow: hidden;
   background-color: var(--bg-void);
   color: var(--text-primary);
 }
 
+/* Phaser Scale.FIT + Scale.CENTER_BOTH is the single centering authority via inline margins */
 #game-container {
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
 }
 
 #game-container canvas {
   display: block;
-  aspect-ratio: 16 / 9;
-  max-width: 100dvw;
-  max-height: 100dvh;
   box-shadow:
     0 0 60px rgba(0, 0, 0, 0.85),
-    0 0 1px rgba(126, 232, 250, 0.22);
+    0 0 1px rgba(230, 172, 76, 0.28);
   outline: none;
 }
 
+/* Modal scroll containment rules */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(14, 19, 36, 0.82) 0%,
+    rgba(4, 6, 14, 0.94) 100%
+  );
+  backdrop-filter: blur(5px);
+}
+
+#name-dialog {
+  color-scheme: only dark;
+  margin: auto;
+  width: min(34rem, calc(100dvw - 2rem));
+  border: 1.5px solid var(--border-gold);
+  border-radius: 12px;
+  background-color: var(--bg-dialog);
+  color: var(--text-primary);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.92),
+    inset 0 0 0 1px rgba(126, 232, 250, 0.14);
+  user-select: text;
+}
+
+/* Scope layout display exclusively to open state so closed dialog stays hidden */
+#name-dialog[open] {
+  display: block;
+}
+
+.name-dialog-surface {
+  display: flex;
+  flex-direction: column;
+  padding: 2rem 2.2rem;
+}
+
+.name-dialog-kicker {
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  color: var(--accent-amber);
+  margin-block-end: 0.45rem;
+}
+
+#name-dialog-title {
+  font-size: 1.55rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+  margin-block-end: 0.75rem;
+}
+
+.name-dialog-lore {
+  font-size: 0.98rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  margin-block-end: 1.5rem;
+}
+
+.name-field-group {
+  display: flex;
+  flex-direction: column;
+  margin-block-end: 1.65rem;
+}
+
+.name-field-group label {
+  display: inline-block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-block-end: 0.45rem;
+}
+
+#player-name-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.75rem 0.95rem;
+  font-family: inherit;
+  font-size: 1.05rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background-color: var(--bg-input);
+  border: 1.5px solid rgba(156, 169, 201, 0.42);
+  border-radius: 8px;
+}
+
+#player-name-input::placeholder {
+  color: rgba(156, 169, 201, 0.52);
+}
+
+#player-name-input:focus-visible,
+.name-dialog-actions button:focus-visible {
+  outline: 3px solid var(--accent-cyan);
+  outline-offset: 2px;
+}
+
+.name-field-hint {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin-block-start: 0.45rem;
+}
+
+.name-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
+.name-dialog-actions button {
+  min-height: 48px;
+  padding: 0.7rem 1.35rem;
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.3;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.btn-primary {
+  flex: 1 1 12rem;
+  font-weight: 600;
+  background-color: #262238;
+  color: #ffe3a8;
+  border: 1.5px solid var(--accent-amber);
+}
+
+.btn-primary:hover {
+  background-color: #352e4c;
+  border-color: #ffd78a;
+}
+
+.btn-secondary {
+  flex: 0 1 auto;
+  background-color: rgba(16, 22, 42, 0.9);
+  color: var(--text-muted);
+  border: 1px solid rgba(156, 169, 201, 0.36);
+}
+
+.btn-secondary:hover {
+  background-color: rgba(28, 36, 66, 0.95);
+  color: var(--text-primary);
+}

@@ -20,9 +20,9 @@ export const IMPRINT_DEFINITIONS: Record<ImprintId, ImprintDefinition> = {
     colorHex: PALETTE.IMPRINT_RESONANCE,
     textColor: PALETTE.TEXT_ROSE,
     summary:
-      'You lent your newly reclaimed Weight to anchor Vespera’s fading sanctuary, placing a fragile present life above certainty of your past.',
+      'You lent your newly anchored Weight to steady Vespera’s fading sanctuary, placing a fragile living memory above certainty of your past.',
     endingReflection:
-      'Within your chest burns a warmth that never belonged to your original form—proof that an unwritten soul can author meaning of its own.',
+      'Within the gold seams of your garment stirs a warmth that never belonged to your former existence, proof that an unwritten soul can author meaning of its own.',
   },
   resolve: {
     id: 'resolve',
@@ -31,9 +31,9 @@ export const IMPRINT_DEFINITIONS: Record<ImprintId, ImprintDefinition> = {
     colorHex: PALETTE.IMPRINT_RESOLVE,
     textColor: PALETTE.TEXT_VIOLET,
     summary:
-      'With Vespera’s solemn blessing, you drew the Echo Core inward—allowing her ancient vigil to rest so the truth of your origin could awaken.',
+      'With Vespera’s solemn blessing, you drew the Echo Core inward, allowing her long vigil to rest so the truth of your origin could awaken.',
     endingReflection:
-      'Cold starlight sharpens the edges of your memory. You step closer to the name you once wore, even as the quiet hearth behind you turns to ash.',
+      'Cold starlight sharpens the edges of your memory. You step closer to the existence you once held, even as the quiet hearth behind you settles into ash.',
   },
 };
 
@@ -67,4 +67,3 @@ export class ImprintManager {
     this.currentImprint = null;
   }
 }
-

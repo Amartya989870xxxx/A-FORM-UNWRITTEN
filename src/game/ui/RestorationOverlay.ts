@@ -18,6 +18,10 @@ export class RestorationOverlay {
       .setVisible(false);
   }
 
+  public getRootObjects(): Phaser.GameObjects.GameObject[] {
+    return [this.container];
+  }
+
   public isOpen(): boolean {
     return this.openState;
   }
@@ -28,84 +32,87 @@ export class RestorationOverlay {
     this.container.removeAll(true);
 
     const backdrop = this.scene.add
-      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x050711, 0.78)
+      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x050711, 0.82)
       .setInteractive();
 
-    const w = 680;
-    const h = 390;
+    const w = 840;
+    const h = 470;
     const panel = this.scene.add.graphics();
-    panel.fillStyle(PALETTE.UI_BG, 0.97);
-    panel.fillRoundedRect(-w / 2, -h / 2, w, h, 12);
-    panel.lineStyle(2, PALETTE.REMNANT_GOLD, 0.92);
-    panel.strokeRoundedRect(-w / 2, -h / 2, w, h, 12);
-    panel.lineStyle(1, PALETTE.REMNANT_BRONZE, 0.45);
-    panel.strokeRoundedRect(-w / 2 + 8, -h / 2 + 8, w - 16, h - 16, 9);
+    panel.fillStyle(PALETTE.UI_BG, 0.98);
+    panel.fillRoundedRect(-w / 2, -h / 2, w, h, 14);
+    panel.lineStyle(2.2, PALETTE.REMNANT_GOLD, 0.94);
+    panel.strokeRoundedRect(-w / 2, -h / 2, w, h, 14);
+    panel.lineStyle(1, PALETTE.REMNANT_BRONZE, 0.48);
+    panel.strokeRoundedRect(-w / 2 + 10, -h / 2 + 10, w - 20, h - 20, 10);
 
     const header = this.scene.add
-      .text(0, -148, 'REMNANT RESTORED', {
+      .text(0, -182, 'GARMENT STABILIZATION ACHIEVED', {
         fontFamily: 'Georgia, serif',
-        fontSize: '13px',
+        fontSize: '15px',
         color: PALETTE.TEXT_GOLD,
         letterSpacing: 4,
       })
       .setOrigin(0.5);
 
     const title = this.scene.add
-      .text(0, -112, def.name.toUpperCase(), {
+      .text(0, -138, def.name.toUpperCase(), {
         fontFamily: 'Georgia, serif',
-        fontSize: '28px',
+        fontSize: '34px',
         fontStyle: 'bold',
         color: PALETTE.TEXT_LIGHT,
       })
       .setOrigin(0.5);
 
     const lore = this.scene.add
-      .text(0, -64, `"${def.lore}"`, {
+      .text(0, -76, `"${def.lore}"`, {
         fontFamily: 'Georgia, serif',
-        fontSize: '14px',
+        fontSize: '16px',
         fontStyle: 'italic',
         color: PALETTE.TEXT_MUTED,
         align: 'center',
-        wordWrap: { width: w - 90 },
+        lineSpacing: 4,
+        wordWrap: { width: w - 110 },
       })
       .setOrigin(0.5);
 
     const gainedBox = this.scene.add.graphics();
-    gainedBox.fillStyle(0x161f36, 0.9);
-    gainedBox.fillRoundedRect(-w / 2 + 36, -18, w - 72, 74, 7);
-    gainedBox.lineStyle(1.2, PALETTE.REMNANT_GOLD, 0.7);
-    gainedBox.strokeRoundedRect(-w / 2 + 36, -18, w - 72, 74, 7);
+    gainedBox.fillStyle(0x161f36, 0.92);
+    gainedBox.fillRoundedRect(-w / 2 + 44, -18, w - 88, 86, 8);
+    gainedBox.lineStyle(1.4, PALETTE.REMNANT_GOLD, 0.75);
+    gainedBox.strokeRoundedRect(-w / 2 + 44, -18, w - 88, 86, 8);
 
     const gainedText = this.scene.add
-      .text(0, 19, `◆ AWAKENED — ${def.gainedSummary}`, {
+      .text(0, 25, `◆ ANCHORED: ${def.gainedSummary}`, {
         fontFamily: 'Georgia, serif',
-        fontSize: '13.5px',
+        fontSize: '15.5px',
         color: PALETTE.TEXT_GOLD,
         align: 'center',
-        wordWrap: { width: w - 104 },
+        lineSpacing: 4,
+        wordWrap: { width: w - 124 },
       })
       .setOrigin(0.5);
 
     const lostBox = this.scene.add.graphics();
-    lostBox.fillStyle(0x171429, 0.9);
-    lostBox.fillRoundedRect(-w / 2 + 36, 68, w - 72, 64, 7);
-    lostBox.lineStyle(1.2, PALETTE.ETHEREAL_BLUE, 0.55);
-    lostBox.strokeRoundedRect(-w / 2 + 36, 68, w - 72, 64, 7);
+    lostBox.fillStyle(0x171429, 0.92);
+    lostBox.fillRoundedRect(-w / 2 + 44, 82, w - 88, 76, 8);
+    lostBox.lineStyle(1.4, PALETTE.ETHEREAL_BLUE, 0.58);
+    lostBox.strokeRoundedRect(-w / 2 + 44, 82, w - 88, 76, 8);
 
     const lostText = this.scene.add
-      .text(0, 100, `◇ SURRENDERED — ${def.lostSummary}`, {
+      .text(0, 120, `◇ SURRENDERED: ${def.lostSummary}`, {
         fontFamily: 'Georgia, serif',
-        fontSize: '13.5px',
+        fontSize: '15.5px',
         color: PALETTE.TEXT_CYAN,
         align: 'center',
-        wordWrap: { width: w - 104 },
+        lineSpacing: 4,
+        wordWrap: { width: w - 124 },
       })
       .setOrigin(0.5);
 
     const prompt = this.scene.add
-      .text(0, 162, '[ Press SPACE or E to Stand Upon the Earth ]', {
+      .text(0, 194, '[ Press SPACE or E to Stand Upon the Earth ]', {
         fontFamily: 'Georgia, serif',
-        fontSize: '14px',
+        fontSize: '16px',
         color: PALETTE.TEXT_LIGHT,
       })
       .setOrigin(0.5);
@@ -145,4 +152,3 @@ export class RestorationOverlay {
     cb?.();
   }
 }
-

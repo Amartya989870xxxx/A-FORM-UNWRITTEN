@@ -1,6 +1,7 @@
 import type { ImprintId } from './SaveManager';
 
 export interface DialogueContext {
+  playerName?: string;
   hasWeight: boolean;
   imprint: ImprintId | null;
   flags: Record<string, boolean>;
@@ -119,4 +120,3 @@ export class DialogueManager {
     return next;
   }
 }
-

@@ -4,6 +4,7 @@ import { AudioManager } from '../systems/AudioManager';
 
 export interface PauseMenuCallbacks {
   onResume: () => void;
+  onOpenAtlas: () => void;
   onOpenJournal: () => void;
   onAudioToggled: () => void;
   onRestart: () => void;
@@ -26,6 +27,7 @@ export class PauseMenu {
     this.scene = scene;
     this.options = [
       { getLabel: () => 'Resume Journey', action: () => callbacks.onResume() },
+      { getLabel: () => 'Open World Atlas (Tab)', action: () => callbacks.onOpenAtlas() },
       { getLabel: () => 'Open Chronicle (J)', action: () => callbacks.onOpenJournal() },
       {
         getLabel: () => `Audio: ${AudioManager.getInstance().isMuted() ? 'Muted' : 'Enabled'} (M)`,
@@ -35,7 +37,7 @@ export class PauseMenu {
           this.rebuild();
         },
       },
-      { getLabel: () => 'Restart Vertical Slice', action: () => callbacks.onRestart() },
+      { getLabel: () => 'Restart Chapter One', action: () => callbacks.onRestart() },
       { getLabel: () => 'Return to Title Screen', action: () => callbacks.onMainMenu() },
     ];
 
@@ -44,6 +46,10 @@ export class PauseMenu {
       .setScrollFactor(0)
       .setDepth(160)
       .setVisible(false);
+  }
+
+  public getRootObjects(): Phaser.GameObjects.GameObject[] {
+    return [this.container];
   }
 
   public isOpen(): boolean {
@@ -80,21 +86,21 @@ export class PauseMenu {
     this.container.removeAll(true);
 
     const backdrop = this.scene.add
-      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x050711, 0.78)
+      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x050711, 0.82)
       .setInteractive();
 
-    const w = 430;
-    const h = 380;
+    const w = 540;
+    const h = 490;
     const panel = this.scene.add.graphics();
-    panel.fillStyle(PALETTE.UI_BG, 0.96);
-    panel.fillRoundedRect(-w / 2, -h / 2, w, h, 12);
-    panel.lineStyle(1.6, PALETTE.UI_BORDER_CYAN, 0.78);
-    panel.strokeRoundedRect(-w / 2, -h / 2, w, h, 12);
+    panel.fillStyle(PALETTE.UI_BG, 0.97);
+    panel.fillRoundedRect(-w / 2, -h / 2, w, h, 14);
+    panel.lineStyle(1.8, PALETTE.REMNANT_GOLD, 0.82);
+    panel.strokeRoundedRect(-w / 2, -h / 2, w, h, 14);
 
     const title = this.scene.add
-      .text(0, -h / 2 + 40, 'JOURNEY PAUSED', {
+      .text(0, -h / 2 + 44, 'JOURNEY PAUSED', {
         fontFamily: 'Georgia, serif',
-        fontSize: '20px',
+        fontSize: '23px',
         fontStyle: 'bold',
         color: PALETTE.TEXT_LIGHT,
         letterSpacing: 3,
@@ -104,11 +110,11 @@ export class PauseMenu {
     const controlsNote = this.scene.add
       .text(
         0,
-        h / 2 - 28,
-        'Move: A/D  •  Jump/Float: Space  •  Impact: S+Space  •  Interact: E',
+        h / 2 - 30,
+        'Move: A/D  •  Leap/Drift: Space  •  Impact: S+Space  •  Atlas: Tab',
         {
           fontFamily: 'Georgia, serif',
-          fontSize: '11.5px',
+          fontSize: '13px',
           color: PALETTE.TEXT_MUTED,
         }
       )
@@ -116,28 +122,28 @@ export class PauseMenu {
 
     this.container.add([backdrop, panel, title, controlsNote]);
 
-    const startY = -74;
-    const rowH = 44;
+    const startY = -124;
+    const rowH = 48;
 
     this.options.forEach((opt, idx) => {
       const selected = idx === this.selectedIndex;
-      const y = startY + idx * 52;
-      const btnW = 330;
+      const y = startY + idx * 57;
+      const btnW = 410;
 
       const bg = this.scene.add.graphics();
-      bg.fillStyle(selected ? 0x1b2442 : 0x11172b, 0.95);
-      bg.fillRoundedRect(-btnW / 2, y - rowH / 2, btnW, rowH, 7);
+      bg.fillStyle(selected ? 0x1b2442 : 0x11172b, 0.96);
+      bg.fillRoundedRect(-btnW / 2, y - rowH / 2, btnW, rowH, 8);
       bg.lineStyle(
-        selected ? 1.6 : 1,
+        selected ? 1.8 : 1,
         selected ? PALETTE.REMNANT_GOLD : PALETTE.STONE_HIGHLIGHT,
-        selected ? 0.95 : 0.45
+        selected ? 0.96 : 0.45
       );
-      bg.strokeRoundedRect(-btnW / 2, y - rowH / 2, btnW, rowH, 7);
+      bg.strokeRoundedRect(-btnW / 2, y - rowH / 2, btnW, rowH, 8);
 
       const label = this.scene.add
         .text(0, y, `${selected ? '◆  ' : ''}${opt.getLabel()}`, {
           fontFamily: 'Georgia, serif',
-          fontSize: '15px',
+          fontSize: '16.5px',
           color: selected ? PALETTE.TEXT_GOLD : PALETTE.TEXT_LIGHT,
         })
         .setOrigin(0.5);
@@ -161,4 +167,3 @@ export class PauseMenu {
     });
   }
 }
-

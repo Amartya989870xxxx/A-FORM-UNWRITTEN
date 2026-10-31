@@ -1,21 +1,26 @@
 import Phaser from 'phaser';
 import {
+  DEFAULT_PLAYER_NAME,
   GAME_EVENTS,
   GAME_HEIGHT,
   GAME_WIDTH,
   PALETTE,
   SCENE_KEYS,
+  WORLD_CAMERA_ZOOM,
   WORLD_HEIGHT,
   WORLD_WIDTH,
+  type AdventurerRank,
 } from '../constants';
 import { DIALOGUE_TREES } from '../data/dialogues';
-import { ECHO_FRAGMENT_DEFINITIONS } from '../data/quests';
+import { ECHO_FRAGMENT_DEFINITIONS, RELIC_DEFINITIONS } from '../data/quests';
 import {
   CHAPTER_TRIGGERS,
+  FOREGROUND_SILHOUETTES,
   WORLD_PLATFORMS,
   WORLD_PROPS,
   WORLD_RUNE_SIGNS,
   WORLD_UPDRAFTS,
+  type RuinPropDef,
 } from '../data/world';
 import { Interactable } from '../entities/Interactable';
 import { NPC } from '../entities/NPC';
@@ -29,33 +34,58 @@ import {
 } from '../entities/PuzzleObjects';
 import { AudioManager } from '../systems/AudioManager';
 import { DialogueManager } from '../systems/DialogueManager';
+import { ExplorationManager } from '../systems/ExplorationManager';
 import { ImprintManager } from '../systems/ImprintManager';
 import { QuestManager } from '../systems/QuestManager';
 import { REMNANT_DEFINITIONS, RemnantManager } from '../systems/RemnantManager';
-import { SaveManager, type SaveState } from '../systems/SaveManager';
+import {
+  SaveManager,
+  createDefaultSoulSpectrum,
+  sanitizePlayerName,
+  type SaveState,
+  type SoulSpectrumState,
+} from '../systems/SaveManager';
+import { ConfirmModal } from '../ui/ConfirmModal';
 import { DialogueBox } from '../ui/DialogueBox';
 import { HUD } from '../ui/HUD';
 import { Journal } from '../ui/Journal';
 import { PauseMenu } from '../ui/PauseMenu';
 import { RestorationOverlay } from '../ui/RestorationOverlay';
+import { WorldMap } from '../ui/WorldMap';
 import { ArtGenerator } from '../utils/ArtGenerator';
 
 export interface GameSceneInitData {
   loadSaved?: boolean;
+  playerName?: string;
 }
 
 export class GameScene extends Phaser.Scene {
-  // Parallax layers
+  // Cameras & Parallax layers
+  private uiCamera!: Phaser.Cameras.Scene2D.Camera;
+  private uiObjects = new Set<Phaser.GameObjects.GameObject>();
+  private uiIgnoredObjects = new WeakSet<Phaser.GameObjects.GameObject>();
+
   private parallaxFar!: Phaser.GameObjects.TileSprite;
   private parallaxMid!: Phaser.GameObjects.TileSprite;
   private parallaxNear!: Phaser.GameObjects.TileSprite;
+  private vignetteImage!: Phaser.GameObjects.Image;
+  private animatedPropsGfx!: Phaser.GameObjects.Graphics;
   private conduitLinesGfx!: Phaser.GameObjects.Graphics;
+  private compassGfx!: Phaser.GameObjects.Graphics;
+  private static readonly COMPASS_SENSE_RADIUS = 480;
+  private mistBands: Array<{
+    sprite: Phaser.GameObjects.Image;
+    baseX: number;
+    speed: number;
+    amp: number;
+  }> = [];
 
   // Core systems
   public remnantManager!: RemnantManager;
   public imprintManager!: ImprintManager;
   public questManager!: QuestManager;
   public dialogueManager!: DialogueManager;
+  public explorationManager!: ExplorationManager;
 
   // Entities & world objects
   public player!: Player;
@@ -67,20 +97,29 @@ export class GameScene extends Phaser.Scene {
   private gates = new Map<string, RunicGate>();
   private npcs = new Map<string, NPC>();
   private interactables: Interactable[] = [];
+  private animatedProps: RuinPropDef[] = [];
 
   // UI overlays
   private hud!: HUD;
   private dialogueBox!: DialogueBox;
   private restorationOverlay!: RestorationOverlay;
   private journal!: Journal;
+  private worldMap!: WorldMap;
   private pauseMenu!: PauseMenu;
+  private confirmModal!: ConfirmModal;
 
   // Runtime state
+  public playerName = DEFAULT_PLAYER_NAME;
+  public adventurerRank: AdventurerRank = 'G';
+  public relics = new Set<string>();
+  public soulAffinities: SoulSpectrumState = createDefaultSoulSpectrum();
   public worldFlags: Record<string, boolean> = {};
   public discoveredEchoes = new Set<string>();
+  private compassSensedIds: string[] = [];
+
   private visitedChapters = new Set<number>();
   private currentChapter = 1;
-  private currentChapterTitle = 'Chapter I — The Shattered Verge';
+  private currentChapterTitle = 'Chapter I: The Shattered Verge';
   private isRestoringSequence = false;
   private isEndingSequence = false;
   private blockTouchToastCooldownMs = 0;
@@ -95,6 +134,9 @@ export class GameScene extends Phaser.Scene {
   private keyE!: Phaser.Input.Keyboard.Key;
   private keyEnter!: Phaser.Input.Keyboard.Key;
   private keyJ!: Phaser.Input.Keyboard.Key;
+  private keyH!: Phaser.Input.Keyboard.Key;
+  private keyV!: Phaser.Input.Keyboard.Key;
+  private keyTab!: Phaser.Input.Keyboard.Key;
   private keyM!: Phaser.Input.Keyboard.Key;
   private keyEsc!: Phaser.Input.Keyboard.Key;
   private keyOne!: Phaser.Input.Keyboard.Key;
@@ -106,6 +148,8 @@ export class GameScene extends Phaser.Scene {
 
   public create(data?: GameSceneInitData): void {
     // Reset collections on scene start/restart
+    this.uiObjects.clear();
+    this.uiIgnoredObjects = new WeakSet<Phaser.GameObjects.GameObject>();
     this.updrafts.clear();
     this.blocks.clear();
     this.plates.clear();
@@ -113,24 +157,34 @@ export class GameScene extends Phaser.Scene {
     this.gates.clear();
     this.npcs.clear();
     this.interactables = [];
+    this.animatedProps = [];
+    this.mistBands = [];
     this.worldFlags = {};
     this.discoveredEchoes.clear();
+    this.compassSensedIds = [];
+    this.relics.clear();
     this.visitedChapters.clear();
     this.isRestoringSequence = false;
     this.isEndingSequence = false;
     this.blockTouchToastCooldownMs = 0;
 
-    // Ensure custom scene event listeners are cleaned up on restart/shutdown
+    // Clean up custom scene event listeners on restart/shutdown
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.events.removeAllListeners(GAME_EVENTS.QUEST_UPDATED);
       this.events.removeAllListeners(GAME_EVENTS.REMNANT_RESTORED);
       this.events.removeAllListeners(GAME_EVENTS.IMPRINT_ACQUIRED);
       this.events.removeAllListeners(GAME_EVENTS.ECHO_DISCOVERED);
+      this.events.removeAllListeners(GAME_EVENTS.RELIC_ACQUIRED);
+      this.events.removeAllListeners(GAME_EVENTS.LOCATION_DISCOVERED);
       this.events.removeAllListeners(GAME_EVENTS.CHAPTER_CHANGED);
     });
 
     const saved: SaveState | null = data?.loadSaved ? SaveManager.load() : null;
     if (saved) {
+      this.playerName = sanitizePlayerName(saved.playerName);
+      this.adventurerRank = saved.adventurerRank;
+      this.soulAffinities = { ...createDefaultSoulSpectrum(), ...saved.soulAffinities };
+      saved.relics.forEach((r) => this.relics.add(r));
       this.worldFlags = { ...saved.worldFlags };
       saved.discoveredEchoes.forEach((e) => this.discoveredEchoes.add(e));
       this.currentChapter = saved.chapter;
@@ -139,8 +193,11 @@ export class GameScene extends Phaser.Scene {
         this.visitedChapters.add(c);
       }
     } else {
+      this.playerName = sanitizePlayerName(data?.playerName);
+      this.adventurerRank = 'G';
+      this.soulAffinities = createDefaultSoulSpectrum();
       this.currentChapter = 1;
-      this.currentChapterTitle = 'Chapter I — The Shattered Verge';
+      this.currentChapterTitle = 'Chapter I: The Shattered Verge';
     }
 
     // Initialize managers
@@ -148,6 +205,11 @@ export class GameScene extends Phaser.Scene {
     this.imprintManager = new ImprintManager(this.events, saved?.imprint ?? null);
     this.questManager = new QuestManager(this.events, saved?.questStates);
     this.dialogueManager = new DialogueManager(DIALOGUE_TREES);
+    this.explorationManager = new ExplorationManager(
+      this.events,
+      saved?.discoveredCells ?? [],
+      saved?.discoveredLocations ?? ['loc_precipice']
+    );
 
     if (!saved) {
       this.questManager.startQuest('q_awakening_verge', true);
@@ -156,15 +218,24 @@ export class GameScene extends Phaser.Scene {
     AudioManager.getInstance().unlockAndStartAmbient(this.remnantManager.hasWeight());
     AudioManager.getInstance().setGroundedMode(this.remnantManager.hasWeight());
 
-    // Configure physics & world bounds
+    // Configure physics & expanded world bounds
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT + 120);
 
     this.buildBackdropAndAtmosphere();
     this.buildWorldGeometry();
+    this.buildForegroundDepthLayer();
     this.buildPuzzlesAndEntities(saved);
     this.buildUI();
     this.setupInput();
-    this.setupCamera();
+    this.setupCameras();
+
+    // Seed initial fog-of-war cell discovery around spawn/load position
+    this.explorationManager.updatePlayerPosition(
+      this.player.sprite.x,
+      this.player.sprite.y,
+      this.getMapRevealRadius()
+    );
+    this.hud.refresh();
 
     this.cameras.main.fadeIn(750, 7, 9, 19);
 
@@ -172,41 +243,126 @@ export class GameScene extends Phaser.Scene {
       this.visitedChapters.add(1);
       this.time.delayedCall(450, () => {
         this.hud.showChapterCard(
-          'Chapter I — The Shattered Verge',
-          'An Unfinished Outline Upon Ancient Stone'
+          'Chapter I: The Shattered Verge',
+          'A Stabilizing Garment Upon Forgotten Stone'
         );
       });
       this.saveCheckpoint('awakening_dais');
     } else {
       this.time.delayedCall(350, () => {
-        this.hud.showToast(`Journey Resumed — ${this.currentChapterTitle}`, 'gold', 2800);
+        this.hud.showToast(
+          `Journey Resumed: ${this.playerName} (${this.currentChapterTitle})`,
+          'gold',
+          2900
+        );
       });
     }
   }
 
+  public isWorldMapOpen(): boolean {
+    return this.worldMap?.isOpen() ?? false;
+  }
+
+  public isJournalOpen(): boolean {
+    return this.journal?.isOpen() ?? false;
+  }
+
+  public isConfirmModalOpen(): boolean {
+    return this.confirmModal?.isOpen() ?? false;
+  }
+
+  public getConfirmModalTitle(): string | null {
+    return this.confirmModal?.getTitle() ?? null;
+  }
+
+  public getCompassSensedInteractableIds(): string[] {
+    return [...this.compassSensedIds];
+  }
+
+  public getCrucibleLocksReleasedCount(): number {
+    return (
+      (this.worldFlags['crucible_lock_west'] ? 1 : 0) +
+      (this.worldFlags['crucible_lock_east'] ? 1 : 0) +
+      (this.worldFlags['crucible_lock_zenith'] ? 1 : 0)
+    );
+  }
+
+  private getMapRevealRadius(): number {
+    return this.relics.has('relic_compass_lens') ? 392 : 270;
+  }
+
   private buildBackdropAndAtmosphere(): void {
+    const invZoom = 1 / WORLD_CAMERA_ZOOM;
+    const toCamScreenY = (screenY: number) =>
+      GAME_HEIGHT / 2 + (screenY - GAME_HEIGHT / 2) * invZoom;
+
     this.add
       .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'tex_sky_gradient')
       .setScrollFactor(0)
+      .setScale(invZoom)
       .setDepth(0);
 
     this.parallaxFar = this.add
-      .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT - 220, GAME_WIDTH, 520, 'tex_parallax_far')
+      .tileSprite(
+        GAME_WIDTH / 2,
+        toCamScreenY(GAME_HEIGHT - 340),
+        GAME_WIDTH,
+        680,
+        'tex_parallax_far'
+      )
       .setScrollFactor(0)
+      .setScale(invZoom)
       .setDepth(1)
-      .setAlpha(0.88);
+      .setAlpha(0.9);
 
     this.parallaxMid = this.add
-      .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT - 190, GAME_WIDTH, 540, 'tex_parallax_mid')
+      .tileSprite(
+        GAME_WIDTH / 2,
+        toCamScreenY(GAME_HEIGHT - 320),
+        GAME_WIDTH,
+        680,
+        'tex_parallax_mid'
+      )
       .setScrollFactor(0)
+      .setScale(invZoom)
       .setDepth(2)
-      .setAlpha(0.92);
+      .setAlpha(0.93);
 
     this.parallaxNear = this.add
-      .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT - 165, GAME_WIDTH, 560, 'tex_parallax_near')
+      .tileSprite(
+        GAME_WIDTH / 2,
+        toCamScreenY(GAME_HEIGHT - 300),
+        GAME_WIDTH,
+        700,
+        'tex_parallax_near'
+      )
       .setScrollFactor(0)
+      .setScale(invZoom)
       .setDepth(3)
-      .setAlpha(0.95);
+      .setAlpha(0.96);
+
+    // Volumetric 2.5D drifting valley mist bands
+    const mistPlacements = [
+      { x: 540, y: 900, scaleX: 1.8, scaleY: 1.15, alpha: 0.42, speed: 0.32, amp: 52, depth: 13 },
+      { x: 1295, y: 785, scaleX: 1.9, scaleY: 1.25, alpha: 0.46, speed: 0.4, amp: 44, depth: 13 },
+      { x: 2480, y: 585, scaleX: 2.2, scaleY: 1.2, alpha: 0.38, speed: 0.28, amp: 64, depth: 13 },
+      { x: 3680, y: 530, scaleX: 2.4, scaleY: 1.3, alpha: 0.48, speed: 0.36, amp: 70, depth: 13 },
+      { x: 4480, y: 558, scaleX: 1.9, scaleY: 1.1, alpha: 0.34, speed: 0.3, amp: 46, depth: 33 },
+      { x: 3550, y: 1142, scaleX: 2.5, scaleY: 1.15, alpha: 0.36, speed: 0.25, amp: 60, depth: 33 },
+    ];
+    for (const mp of mistPlacements) {
+      const sprite = this.add
+        .image(mp.x, mp.y, 'tex_mist_band')
+        .setScale(mp.scaleX, mp.scaleY)
+        .setAlpha(mp.alpha)
+        .setDepth(mp.depth);
+      this.mistBands.push({
+        sprite,
+        baseX: mp.x,
+        speed: mp.speed,
+        amp: mp.amp,
+      });
+    }
 
     // Subtle world-space ambient motes across the Shattered Verge
     this.add
@@ -215,66 +371,80 @@ export class GameScene extends Phaser.Scene {
         y: { min: 180, max: WORLD_HEIGHT - 80 },
         speedY: { min: -22, max: -6 },
         speedX: { min: -12, max: 12 },
-        scale: { start: 0.35, end: 0 },
-        alpha: { start: 0.35, end: 0 },
+        scale: { start: 0.34, end: 0 },
+        alpha: { start: 0.34, end: 0 },
         lifespan: 5400,
-        frequency: 110,
+        frequency: 105,
         blendMode: 'ADD',
       })
       .setDepth(12);
 
-    // Warm bioluminescent embers in the Sunken Sanctum
+    // Warm bioluminescent & brazier embers in the Crucible and Sunken Sanctum
     this.add
       .particles(0, 0, 'tex_mote_gold', {
-        x: { min: 1400, max: 4350 },
-        y: { min: 920, max: 1150 },
-        speedY: { min: -18, max: -5 },
+        x: { min: 1400, max: WORLD_WIDTH - 140 },
+        y: { min: 320, max: 1160 },
+        speedY: { min: -20, max: -5 },
         speedX: { min: -8, max: 8 },
-        scale: { start: 0.38, end: 0 },
-        alpha: { start: 0.42, end: 0 },
+        scale: { start: 0.36, end: 0 },
+        alpha: { start: 0.4, end: 0 },
         lifespan: 4800,
-        frequency: 140,
+        frequency: 120,
         blendMode: 'ADD',
       })
       .setDepth(12);
 
-    // Screen-edge atmospheric vignette
-    this.add
+    // Screen-edge atmospheric vignette (rendered on 1:1 UI camera)
+    this.vignetteImage = this.add
       .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'tex_vignette')
       .setScrollFactor(0)
       .setDepth(90);
   }
 
   private buildWorldGeometry(): void {
-    // Decorative ancient ruins layer behind platforms
     const propsGfx = this.add.graphics().setDepth(10);
     for (const prop of WORLD_PROPS) {
-      this.drawRuinProp(propsGfx, prop.x, prop.y, prop.kind, prop.scale ?? 1);
+      this.drawStaticRuinProp(propsGfx, prop.x, prop.y, prop.kind, prop.scale ?? 1);
+      if (prop.kind === 'brazier' || prop.kind === 'waterfall') {
+        this.animatedProps.push(prop);
+      }
+      if (prop.kind === 'brazier') {
+        const s = prop.scale ?? 1;
+        this.add
+          .particles(prop.x, prop.y - 38 * s, 'tex_mote_amber', {
+            x: { min: -7, max: 7 },
+            y: { min: -4, max: 4 },
+            speedY: { min: -44, max: -16 },
+            speedX: { min: -10, max: 10 },
+            scale: { start: 0.3, end: 0 },
+            alpha: { start: 0.72, end: 0 },
+            lifespan: 950,
+            frequency: 165,
+            blendMode: 'ADD',
+          })
+          .setDepth(14);
+      }
     }
 
-    // Dynamic conduit trace lines connecting mechanisms to gates
+    this.animatedPropsGfx = this.add.graphics().setDepth(13);
     this.conduitLinesGfx = this.add.graphics().setDepth(11);
+    this.compassGfx = this.add.graphics().setDepth(31);
 
-    // Diegetic carved stone tutorial inscriptions
+    // Diegetic carved stone inscriptions
     for (const sign of WORLD_RUNE_SIGNS) {
-      const signW = sign.subtext ? 268 : 186;
-      const signPlinth = this.add.graphics().setDepth(11);
-      signPlinth.fillStyle(0x13192e, 0.72);
-      signPlinth.fillRoundedRect(sign.x - signW / 2, sign.y - 24, signW, sign.subtext ? 46 : 30, 6);
-      signPlinth.lineStyle(1, PALETTE.STONE_HIGHLIGHT, 0.38);
-      signPlinth.strokeRoundedRect(sign.x - signW / 2, sign.y - 24, signW, sign.subtext ? 46 : 30, 6);
-
-      this.add
-        .text(sign.x, sign.y - 10, sign.text, {
+      const titleObj = this.add
+        .text(sign.x, sign.subtext ? sign.y - 10 : sign.y - 9, sign.text, {
           fontFamily: 'Georgia, serif',
           fontSize: '12.5px',
           color: PALETTE.TEXT_CYAN,
         })
         .setOrigin(0.5)
+        .setResolution(2)
         .setDepth(12);
 
+      let subObj: Phaser.GameObjects.Text | undefined;
       if (sign.subtext) {
-        this.add
+        subObj = this.add
           .text(sign.x, sign.y + 9, sign.subtext, {
             fontFamily: 'Georgia, serif',
             fontSize: '11px',
@@ -282,11 +452,21 @@ export class GameScene extends Phaser.Scene {
             color: PALETTE.TEXT_MUTED,
           })
           .setOrigin(0.5)
+          .setResolution(2)
           .setDepth(12);
       }
+
+      const contentW = Math.max(titleObj.width, subObj ? subObj.width : 0);
+      const signW = Math.max(sign.subtext ? 290 : 184, Math.ceil(contentW + 38));
+      const signH = sign.subtext ? 48 : 30;
+      const signPlinth = this.add.graphics().setDepth(11);
+      signPlinth.fillStyle(0x11172b, 0.82);
+      signPlinth.fillRoundedRect(sign.x - signW / 2, sign.y - 24, signW, signH, 6);
+      signPlinth.lineStyle(1, PALETTE.STONE_HIGHLIGHT, 0.44);
+      signPlinth.strokeRoundedRect(sign.x - signW / 2, sign.y - 24, signW, signH, 6);
     }
 
-    // Carved stone platforms + static Arcade Physics colliders
+    // 2.5D bevelled stone platforms + static Arcade Physics colliders
     const platGfx = this.add.graphics().setDepth(16);
     this.platformsGroup = this.physics.add.staticGroup();
 
@@ -299,28 +479,61 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private drawRuinProp(
+  private buildForegroundDepthLayer(): void {
+    // Foreground 2.5D occluder silhouettes (scrollFactorX 1.14, placed away from platforms & puzzles)
+    const fg = this.add.graphics().setDepth(65).setScrollFactor(1.14, 1).setAlpha(0.46);
+    for (const item of FOREGROUND_SILHOUETTES) {
+      const s = item.scale;
+      if (item.kind === 'pillar_overhang') {
+        fg.fillStyle(0x070a15, 0.92);
+        fg.fillRect(item.x - 24 * s, item.y - 260 * s, 48 * s, 320 * s);
+        fg.fillRoundedRect(item.x - 36 * s, item.y - 270 * s, 72 * s, 20 * s, 4);
+        fg.lineStyle(1, PALETTE.STONE_HIGHLIGHT, 0.24);
+        fg.strokeRect(item.x - 24 * s, item.y - 260 * s, 48 * s, 320 * s);
+      } else if (item.kind === 'broken_arch') {
+        fg.fillStyle(0x070a15, 0.9);
+        fg.fillRect(item.x - 22 * s, item.y - 220 * s, 44 * s, 260 * s);
+        fg.beginPath();
+        fg.moveTo(item.x - 22 * s, item.y - 210 * s);
+        fg.lineTo(item.x + 85 * s, item.y - 250 * s);
+        fg.lineTo(item.x + 70 * s, item.y - 215 * s);
+        fg.closePath();
+        fg.fillPath();
+      } else if (item.kind === 'hanging_vines') {
+        fg.lineStyle(3.2, 0x090d1b, 0.88);
+        for (let i = -2; i <= 2; i++) {
+          fg.beginPath();
+          fg.moveTo(item.x + i * 22, item.y - 280);
+          fg.lineTo(item.x + i * 19 + 7, item.y - 190);
+          fg.lineTo(item.x + i * 24 - 4, item.y - 125 - Math.abs(i) * 14);
+          fg.strokePath();
+        }
+      }
+    }
+  }
+
+  private drawStaticRuinProp(
     g: Phaser.GameObjects.Graphics,
     x: number,
     floorY: number,
-    kind: 'arch' | 'pillar' | 'statue' | 'monolith' | 'roots',
+    kind: RuinPropDef['kind'],
     scale: number
   ): void {
     switch (kind) {
       case 'arch': {
-        const w = 110 * scale;
-        const h = 135 * scale;
-        g.fillStyle(0x161d34, 0.86);
-        g.fillRect(x - w / 2, floorY - h, 18 * scale, h);
-        g.fillRect(x + w / 2 - 18 * scale, floorY - h * 0.88, 18 * scale, h * 0.88);
+        const w = 114 * scale;
+        const h = 138 * scale;
+        g.fillStyle(0x161d34, 0.88);
+        g.fillRect(x - w / 2, floorY - h, 19 * scale, h);
+        g.fillRect(x + w / 2 - 19 * scale, floorY - h * 0.9, 19 * scale, h * 0.9);
         g.fillRoundedRect(x - w / 2 - 8, floorY - h - 14, w + 16, 18 * scale, 4);
-        g.lineStyle(1.4, PALETTE.ETHEREAL_CYAN, 0.22);
+        g.lineStyle(1.4, PALETTE.REMNANT_GOLD, 0.25);
         g.strokeCircle(x, floorY - h + 6, 16 * scale);
         break;
       }
       case 'pillar': {
-        const h = 115 * scale;
-        g.fillStyle(0x182038, 0.85);
+        const h = 118 * scale;
+        g.fillStyle(0x182038, 0.86);
         g.fillRect(x - 13 * scale, floorY - h, 26 * scale, h);
         g.fillRect(x - 19 * scale, floorY - 12, 38 * scale, 12);
         g.fillStyle(PALETTE.ETHEREAL_CYAN, 0.18);
@@ -328,7 +541,7 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'statue': {
-        const h = 92 * scale;
+        const h = 94 * scale;
         g.fillStyle(0x19213a, 0.88);
         g.fillRoundedRect(x - 20 * scale, floorY - 18, 40 * scale, 18, 3);
         g.beginPath();
@@ -342,7 +555,7 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'monolith': {
-        const h = 140 * scale;
+        const h = 144 * scale;
         g.fillStyle(0x151c31, 0.9);
         g.beginPath();
         g.moveTo(x - 22 * scale, floorY);
@@ -352,12 +565,11 @@ export class GameScene extends Phaser.Scene {
         g.lineTo(x + 22 * scale, floorY);
         g.closePath();
         g.fillPath();
-        g.lineStyle(1.4, PALETTE.REMNANT_GOLD, 0.3);
+        g.lineStyle(1.4, PALETTE.REMNANT_GOLD, 0.32);
         g.strokeCircle(x, floorY - h * 0.55, 11 * scale);
         break;
       }
       case 'roots': {
-        // Bioluminescent ceiling/arch roots in the Sunken Sanctum
         g.lineStyle(2.2, 0x3b4d6b, 0.65);
         for (let i = -2; i <= 2; i++) {
           g.beginPath();
@@ -370,14 +582,98 @@ export class GameScene extends Phaser.Scene {
         }
         break;
       }
+      case 'brazier': {
+        // Carved iron-and-stone tripod brazier bowl
+        const h = 34 * scale;
+        g.fillStyle(0x181c2e, 0.96);
+        g.fillRect(x - 7 * scale, floorY - h + 8 * scale, 14 * scale, h - 8 * scale);
+        g.fillRoundedRect(x - 13 * scale, floorY - 6 * scale, 26 * scale, 6 * scale, 2);
+        g.fillStyle(0x282438, 1);
+        g.beginPath();
+        g.moveTo(x - 16 * scale, floorY - h);
+        g.lineTo(x + 16 * scale, floorY - h);
+        g.lineTo(x + 10 * scale, floorY - h + 10 * scale);
+        g.lineTo(x - 10 * scale, floorY - h + 10 * scale);
+        g.closePath();
+        g.fillPath();
+        g.lineStyle(1.2, PALETTE.REMNANT_BRONZE, 0.8);
+        g.strokeRect(x - 14 * scale, floorY - h, 28 * scale, 3 * scale);
+        break;
+      }
+      case 'waterfall': {
+        // Drawn dynamically in renderAnimatedWorldProps
+        break;
+      }
+    }
+  }
+
+  private renderAnimatedWorldProps(time: number): void {
+    const t = time * 0.001;
+    this.animatedPropsGfx.clear();
+
+    for (let idx = 0; idx < this.animatedProps.length; idx++) {
+      const prop = this.animatedProps[idx];
+      const s = prop.scale ?? 1;
+      if (prop.kind === 'brazier') {
+        const fx = prop.x;
+        const fy = prop.y - 36 * s;
+        const flicker = Math.sin(t * 9.5 + idx * 1.7) * 2.2 + Math.cos(t * 14 + idx) * 1.1;
+
+        // Warm ambient light pool cast onto surrounding masonry
+        this.animatedPropsGfx.fillStyle(PALETTE.BRAZIER_GLOW, 0.08 + Math.sin(t * 6 + idx) * 0.02);
+        this.animatedPropsGfx.fillCircle(fx, fy - 4, 56 * s);
+        this.animatedPropsGfx.fillStyle(PALETTE.BRAZIER_FLAME, 0.18);
+        this.animatedPropsGfx.fillCircle(fx, fy - 4, 24 * s);
+
+        // Outer amber flame tongue
+        this.animatedPropsGfx.fillStyle(PALETTE.BRAZIER_GLOW, 0.9);
+        this.animatedPropsGfx.beginPath();
+        this.animatedPropsGfx.moveTo(fx - 9 * s, fy + 2);
+        this.animatedPropsGfx.lineTo(fx + flicker * 0.4, fy - (18 + flicker) * s);
+        this.animatedPropsGfx.lineTo(fx + 9 * s, fy + 2);
+        this.animatedPropsGfx.closePath();
+        this.animatedPropsGfx.fillPath();
+
+        // Bright gold-white flame core
+        this.animatedPropsGfx.fillStyle(0xffe6a3, 0.95);
+        this.animatedPropsGfx.beginPath();
+        this.animatedPropsGfx.moveTo(fx - 4.5 * s, fy + 2);
+        this.animatedPropsGfx.lineTo(fx - flicker * 0.25, fy - (10 + flicker * 0.6) * s);
+        this.animatedPropsGfx.lineTo(fx + 4.5 * s, fy + 2);
+        this.animatedPropsGfx.closePath();
+        this.animatedPropsGfx.fillPath();
+      } else if (prop.kind === 'waterfall') {
+        const wx = prop.x;
+        const topY = prop.y + 14;
+        const dropH = 225 * s;
+
+        this.animatedPropsGfx.fillStyle(PALETTE.ETHEREAL_CYAN, 0.14);
+        this.animatedPropsGfx.fillRect(wx - 13 * s, topY, 26 * s, dropH);
+
+        for (let strand = -1; strand <= 1; strand++) {
+          const sx = wx + strand * 6 * s;
+          const offset = ((t * 145 + idx * 31 + strand * 29) % 48);
+          this.animatedPropsGfx.lineStyle(2.2, PALETTE.ETHEREAL_SOFT, 0.34);
+          for (let segY = topY + offset; segY < topY + dropH - 22; segY += 48) {
+            this.animatedPropsGfx.beginPath();
+            this.animatedPropsGfx.moveTo(sx, segY);
+            this.animatedPropsGfx.lineTo(sx, segY + 26);
+            this.animatedPropsGfx.strokePath();
+          }
+        }
+
+        // Mist spray cloud at base of cascade
+        this.animatedPropsGfx.fillStyle(PALETTE.ETHEREAL_SOFT, 0.18 + Math.sin(t * 4 + idx) * 0.04);
+        this.animatedPropsGfx.fillEllipse(wx, topY + dropH, 52 * s, 18 * s);
+      }
     }
   }
 
   private buildPuzzlesAndEntities(saved: SaveState | null): void {
     const hasWeight = this.remnantManager.hasWeight();
 
-    // 1. Spawn Player
-    const startX = saved ? saved.playerX : 165;
+    // 1. Spawn Player (Stabilizing Garment)
+    const startX = saved ? saved.playerX : 215;
     const startY = saved ? saved.playerY : 810;
     this.player = new Player(
       this,
@@ -395,30 +691,46 @@ export class GameScene extends Phaser.Scene {
     });
 
     // 2. Wind Updrafts
+    const domeThermalActive =
+      Boolean(this.worldFlags['crucible_lock_west']) &&
+      Boolean(this.worldFlags['crucible_lock_east']);
+
     for (const u of WORLD_UPDRAFTS) {
       const enabled =
         u.id === 'updraft_east_balcony'
           ? Boolean(this.worldFlags['vane_east_active'])
-          : u.initiallyEnabled;
-      this.updrafts.set(
-        u.id,
-        new WindUpdraft(this, u.x, u.y, u.width, u.height, enabled)
-      );
+          : u.id === 'updraft_crucible_dome'
+            ? domeThermalActive
+            : u.initiallyEnabled;
+      this.updrafts.set(u.id, new WindUpdraft(this, u.x, u.y, u.width, u.height, enabled));
     }
 
     // 3. Runic Gates
-    const crucibleOpen =
+    const spireOuterOpen =
       Boolean(this.worldFlags['conduit_north']) && Boolean(this.worldFlags['conduit_east']);
     this.gates.set(
-      'gate_crucible',
+      'gate_spire_outer',
       new RunicGate(this, {
-        id: 'gate_crucible',
+        id: 'gate_spire_outer',
         x: 3210,
         y: 470,
         width: 34,
         height: 140,
         totalSeals: 2,
-        initiallyOpen: crucibleOpen,
+        initiallyOpen: spireOuterOpen,
+      })
+    );
+
+    this.gates.set(
+      'gate_crucible_entry',
+      new RunicGate(this, {
+        id: 'gate_crucible_entry',
+        x: 4120,
+        y: 470,
+        width: 34,
+        height: 140,
+        totalSeals: 1,
+        initiallyOpen: Boolean(this.worldFlags['sky_bell_rung']),
       })
     );
 
@@ -465,7 +777,7 @@ export class GameScene extends Phaser.Scene {
       'gate_threshold',
       new RunicGate(this, {
         id: 'gate_threshold',
-        x: 3720,
+        x: 4180,
         y: 1060,
         width: 36,
         height: 160,
@@ -478,10 +790,10 @@ export class GameScene extends Phaser.Scene {
       this.physics.add.collider(this.player.sprite, gate.collider);
     }
 
-    // 4. Fractured Slabs (destructible via post-Weight Ground Impact)
+    // 4. Fractured Slabs (destructible via Grounded State Ground Impact)
     const slabCrucible = new FracturedSlab(this, {
       id: 'slab_crucible',
-      x: 3650,
+      x: 4650,
       y: 554,
       width: 160,
       height: 28,
@@ -489,7 +801,10 @@ export class GameScene extends Phaser.Scene {
       onShatter: () => {
         this.worldFlags['slab_crucible_broken'] = true;
         this.questManager.completeObjective('q_changed_world', 'obj_shatter_crucible');
-        this.hud.showToast('The fractured vault floor gives way beneath your Weight!', 'gold');
+        this.hud.showToast(
+          'The fractured Crucible floor gives way beneath your anchored Weight!',
+          'gold'
+        );
         this.saveCheckpoint('crucible_descent');
       },
     });
@@ -504,14 +819,26 @@ export class GameScene extends Phaser.Scene {
       initiallyBroken: Boolean(this.worldFlags['slab_sanctum_broken']),
       onShatter: () => {
         this.worldFlags['slab_sanctum_broken'] = true;
-        this.hud.showToast('The calcified sanctum seal shatters open!', 'gold');
+        this.hud.showToast('The calcified sanctum vault shatters open!', 'gold');
         this.saveCheckpoint('sanctum_vault');
       },
     });
     this.slabs.set('slab_sanctum', slabSanctum);
 
     for (const slab of this.slabs.values()) {
-      this.physics.add.collider(this.player.sprite, slab.collider);
+      this.physics.add.collider(
+        this.player.sprite,
+        slab.collider,
+        undefined,
+        () => {
+          if (this.player.isPerformingGroundImpact() && this.player.sprite.y <= slab.collider.y) {
+            AudioManager.getInstance().playGroundImpact();
+            slab.shatter(false);
+            return false;
+          }
+          return true;
+        }
+      );
     }
 
     this.player.setOnGroundImpact((ix, iy) => {
@@ -547,7 +874,7 @@ export class GameScene extends Phaser.Scene {
         if (!this.remnantManager.hasWeight() && this.blockTouchToastCooldownMs <= 0) {
           this.blockTouchToastCooldownMs = 3600;
           this.hud.showToast(
-            'Your unbound form passes without force against the runic granite.',
+            'Your unanchored garment brushes against the runic granite without force.',
             'cyan'
           );
         }
@@ -564,7 +891,7 @@ export class GameScene extends Phaser.Scene {
         latch: false,
         initiallyDepressed: Boolean(this.worldFlags['courtyard_unsealed']),
         onWeightlessTouch: () => {
-          this.hud.showToast('The ancient plinth does not yield. You carry no weight.', 'cyan');
+          this.hud.showToast('The ancient plinth does not yield. Your garment carries no mass.', 'cyan');
         },
         onStateChange: () => this.evaluateGateSeals(),
       })
@@ -579,7 +906,7 @@ export class GameScene extends Phaser.Scene {
         latch: false,
         initiallyDepressed: Boolean(this.worldFlags['courtyard_unsealed']),
         onWeightlessTouch: () => {
-          this.hud.showToast('The counterweight ignores your weightless outline.', 'cyan');
+          this.hud.showToast('The counterweight ignores your unanchored presence.', 'cyan');
         },
         onStateChange: () => this.evaluateGateSeals(),
       })
@@ -618,7 +945,7 @@ export class GameScene extends Phaser.Scene {
     const oren = new NPC(this, 1660, 514, 'oren');
     this.npcs.set('oren', oren);
 
-    const vespera = new NPC(this, 3280, 1114, 'vespera');
+    const vespera = new NPC(this, 3680, 1114, 'vespera');
     vespera.setImprintState(this.imprintManager.getCurrentId());
     this.npcs.set('vespera', vespera);
 
@@ -633,14 +960,47 @@ export class GameScene extends Phaser.Scene {
         id: 'npc_oren',
         x: 1660,
         y: 514,
-        radius: 76,
+        radius: 78,
         kind: 'npc',
         getPrompt: () => 'Converse with Oren',
         onInteract: () => this.openDialogue('npc_oren'),
       })
     );
 
-    // Puzzle 1: North Spire Conduit
+    // Echoes of Substance Stage 1: Surveyor Stele in Zone 2 Observatory
+    this.interactables.push(
+      new Interactable(this, {
+        id: 'survey_stele',
+        x: 1875,
+        y: 514,
+        radius: 72,
+        kind: 'survey_stele',
+        isActivated: () => Boolean(this.worldFlags['survey_inspected']),
+        getPrompt: () =>
+          this.worldFlags['survey_inspected']
+            ? 'Review Crucible Surveyor Diagram'
+            : 'Inspect Surveyor Stele',
+        onInteract: () => {
+          const first = !this.worldFlags['survey_inspected'];
+          this.worldFlags['survey_inspected'] = true;
+          AudioManager.getInstance().playConduitAttune();
+          if (this.questManager.getStatus('q_echoes_of_substance') === 'NOT_STARTED') {
+            this.questManager.startQuest('q_echoes_of_substance');
+          }
+          this.questManager.completeObjective('q_echoes_of_substance', 'obj_inspect_survey');
+          this.hud.showToast(
+            'Surveyor Diagram: "Two Wind-Spire Conduits open the Sky-Arch; the Aerial Bell opens the Dome; three interior Locks uncage Weight."',
+            'gold',
+            5200
+          );
+          if (first) {
+            this.saveCheckpoint('survey_stele');
+          }
+        },
+      })
+    );
+
+    // Echoes of Substance Stage 2a: North Spire Conduit
     this.interactables.push(
       new Interactable(this, {
         id: 'conduit_north',
@@ -662,7 +1022,7 @@ export class GameScene extends Phaser.Scene {
       })
     );
 
-    // Puzzle 1: Wind Vane Switch
+    // Wind Vane Switch
     this.interactables.push(
       new Interactable(this, {
         id: 'vane_east',
@@ -690,7 +1050,7 @@ export class GameScene extends Phaser.Scene {
       })
     );
 
-    // Puzzle 1: East Balcony Conduit
+    // Echoes of Substance Stage 2b: East Balcony Conduit
     this.interactables.push(
       new Interactable(this, {
         id: 'conduit_east',
@@ -712,18 +1072,350 @@ export class GameScene extends Phaser.Scene {
       })
     );
 
-    // Chapter 3: The Remnant of Weight
+    // Echoes of Substance Stage 3: Shattered Sky-Arch Aerial Resonance Bell
+    this.interactables.push(
+      new Interactable(this, {
+        id: 'sky_bell',
+        x: 3760,
+        y: 304,
+        radius: 76,
+        kind: 'sky_bell',
+        isActivated: () => Boolean(this.worldFlags['sky_bell_rung']),
+        getPrompt: () =>
+          this.worldFlags['sky_bell_rung'] ? null : 'Ring Aerial Resonance Bell',
+        onInteract: () => {
+          if (this.worldFlags['sky_bell_rung']) return;
+          this.worldFlags['sky_bell_rung'] = true;
+          AudioManager.getInstance().playQuestChime();
+          this.cameras.main.shake(180, 0.004);
+          this.questManager.completeObjective('q_echoes_of_substance', 'obj_sky_arch_bell');
+          this.evaluateGateSeals();
+          this.hud.showToast(
+            'The Aerial Resonance Bell rings across the clouds! The Crucible Entry Gate opens ahead.',
+            'gold',
+            4200
+          );
+          this.saveCheckpoint('sky_bell_rung');
+        },
+      })
+    );
+
+    // Echoes of Substance Stage 4: Three Crucible Dome Stabilization Locks
+    const crucibleLocks: Array<{ id: string; flag: string; label: string; x: number; y: number }> =
+      [
+        {
+          id: 'crucible_lock_west',
+          flag: 'crucible_lock_west',
+          label: 'Release West Anchor Lever',
+          x: 4255,
+          y: 406,
+        },
+        {
+          id: 'crucible_lock_east',
+          flag: 'crucible_lock_east',
+          label: 'Align East Harmonic Dial',
+          x: 4795,
+          y: 406,
+        },
+        {
+          id: 'crucible_lock_zenith',
+          flag: 'crucible_lock_zenith',
+          label: 'Unseal Zenith Cupola Keystone',
+          x: 4480,
+          y: 238,
+        },
+      ];
+
+    for (const lock of crucibleLocks) {
+      this.interactables.push(
+        new Interactable(this, {
+          id: lock.id,
+          x: lock.x,
+          y: lock.y,
+          radius: 72,
+          kind: 'crucible_lock',
+          isActivated: () => Boolean(this.worldFlags[lock.flag]),
+          getPrompt: () => (this.worldFlags[lock.flag] ? null : lock.label),
+          onInteract: () => {
+            if (this.worldFlags[lock.flag]) return;
+            this.worldFlags[lock.flag] = true;
+            AudioManager.getInstance().playMechanismActivate();
+
+            const count = this.getCrucibleLocksReleasedCount();
+            if (
+              this.worldFlags['crucible_lock_west'] &&
+              this.worldFlags['crucible_lock_east'] &&
+              !this.updrafts.get('updraft_crucible_dome')?.isEnabled()
+            ) {
+              this.updrafts.get('updraft_crucible_dome')?.setEnabled(true);
+              this.hud.showToast(
+                `Crucible Seal ${count} / 3 released! The central dome thermal ignites toward the Zenith Cupola.`,
+                'cyan',
+                4200
+              );
+            } else if (count >= 3) {
+              this.worldFlags['crucible_unsealed'] = true;
+              this.questManager.completeObjective('q_echoes_of_substance', 'obj_crucible_locks');
+              this.cameras.main.shake(220, 0.006);
+              this.hud.showToast(
+                'All three Stabilization Locks released! The Remnant of Weight is uncaged below.',
+                'gold',
+                4400
+              );
+            } else {
+              this.hud.showToast(
+                `Crucible Stabilization Seal released (${count} / 3).`,
+                'gold',
+                3000
+              );
+            }
+            this.saveCheckpoint(lock.id);
+          },
+        })
+      );
+    }
+
+    // Echoes of Substance Stage 5: The Remnant of Weight (locked until all 3 Crucible seals release)
     this.interactables.push(
       new Interactable(this, {
         id: 'remnant_weight',
-        x: 3440,
-        y: 512,
-        radius: 74,
+        x: 4480,
+        y: 514,
+        radius: 76,
         kind: 'remnant_weight',
         isActivated: () => this.remnantManager.hasWeight(),
+        getLockCountRemaining: () => 3 - this.getCrucibleLocksReleasedCount(),
+        getPrompt: () => {
+          if (this.remnantManager.hasWeight()) return null;
+          const remaining = 3 - this.getCrucibleLocksReleasedCount();
+          return remaining > 0
+            ? `Inspect Sealed Remnant Cage (${remaining} Seals Active)`
+            : 'Anchor Garment with Remnant of Weight';
+        },
+        onInteract: () => {
+          if (this.remnantManager.hasWeight()) return;
+          const released = this.getCrucibleLocksReleasedCount();
+          if (released < 3) {
+            AudioManager.getInstance().playDialogueBlip();
+            this.hud.showToast(
+              `Containment active: release all three Crucible Dome Seals first (${released} / 3 released).`,
+              'cyan',
+              3800
+            );
+            return;
+          }
+          this.confirmModal.open({
+            kicker: 'Irreversible Stabilization Rite',
+            title: 'ANCHOR THE REMNANT OF WEIGHT?',
+            body: 'Anchoring your garment grants physical mass, counterweight force, and Ground Impact, but permanently surrenders Unanchored Drift and wind-current ascent.\n\nElevated sky-alcoves and high Wind-Spire ledges will no longer be reachable by wind (though Grounded Counterweight Lifts will awaken along the lower terraces to revisit them).',
+            cancelLabel: 'Step Back (Explore First)',
+            confirmLabel: 'Confirm Stabilization',
+            onCancel: () => {
+              this.syncControlLock();
+            },
+            onConfirm: () => {
+              this.syncControlLock();
+              this.triggerWeightRestoration();
+            },
+          });
+          this.syncControlLock();
+        },
+      })
+    );
+
+    // Post-Weight Grounded Counterweight Lifts (allow revisiting elevated Echo Tablets & upper spire fog cells after losing Unanchored Drift)
+    const counterweightLifts: Array<{
+      id: string;
+      x: number;
+      y: number;
+      radius?: number;
+      prompt: string;
+      destX: number;
+      destY: number;
+      toast: string;
+      surveyPoints?: Array<[number, number]>;
+    }> = [
+      {
+        id: 'lift_courtyard_alcove',
+        x: 1118,
+        y: 814,
+        radius: 58,
+        prompt: 'Engage Counterweight Lift to Sky Alcove',
+        destX: 805,
+        destY: 610,
+        toast: 'Anchored mass engages the ancient pulley, raising you to the Whispering Sky Alcove.',
+        surveyPoints: [[760, 614]],
+      },
+      {
+        id: 'lift_observatory_spires',
+        x: 1948,
+        y: 514,
+        radius: 58,
+        prompt: 'Engage Spire Counterweight Lift to High Overlook',
+        destX: 2606,
+        destY: 182,
+        toast: 'The observatory counterweight hoists your anchored garment to the High Spire Overlook.',
+        surveyPoints: [
+          [1720, 260],
+          [2130, 274],
+          [2560, 186],
+          [2950, 334],
+          [3230, 280],
+        ],
+      },
+      {
+        id: 'lift_peak_sky_arch',
+        x: 2616,
+        y: 186,
+        radius: 52,
+        prompt: 'Traverse Counterweight Cable to Sky-Arch Belfry',
+        destX: 3818,
+        destY: 300,
+        toast: 'The counterweight carriage glides across the upper thermals to the Shattered Sky-Arch.',
+        surveyPoints: [
+          [3470, 310],
+          [3760, 304],
+          [4020, 310],
+        ],
+      },
+      {
+        id: 'lift_belfry_return',
+        x: 3822,
+        y: 304,
+        radius: 54,
+        prompt: 'Descend Counterweight Lift to Observatory',
+        destX: 1948,
+        destY: 510,
+        toast: 'The counterweight cradle lowers you gently back to Oren’s Observatory.',
+      },
+    ];
+
+    for (const lift of counterweightLifts) {
+      this.interactables.push(
+        new Interactable(this, {
+          id: lift.id,
+          x: lift.x,
+          y: lift.y,
+          radius: lift.radius ?? 56,
+          kind: 'waystone_lift',
+          isActivated: () => this.remnantManager.hasWeight(),
+          getPrompt: () => (this.remnantManager.hasWeight() ? lift.prompt : null),
+          onInteract: () => {
+            if (!this.remnantManager.hasWeight()) return;
+            this.useCounterweightLift(lift.destX, lift.destY, lift.toast, lift.surveyPoints);
+          },
+        })
+      );
+    }
+
+    // Optional Hidden Quest (hq_silent_loom): Clue 1 behind Western Precipice
+    this.interactables.push(
+      new Interactable(this, {
+        id: 'clue_loom_1',
+        x: 58,
+        y: 814,
+        radius: 68,
+        kind: 'loom_clue',
+        isActivated: () => Boolean(this.worldFlags['loom_clue_1']),
         getPrompt: () =>
-          this.remnantManager.hasWeight() ? null : 'Reclaim Remnant of Weight',
-        onInteract: () => this.triggerWeightRestoration(),
+          this.worldFlags['loom_clue_1'] ? null : 'Examine Frayed Gold Spool',
+        onInteract: () => {
+          if (this.worldFlags['loom_clue_1']) return;
+          this.worldFlags['loom_clue_1'] = true;
+          this.soulAffinities.silver += 1;
+          AudioManager.getInstance().playConduitAttune();
+          this.questManager.completeObjective('hq_silent_loom', 'obj_loom_thread');
+          this.hud.showToast(
+            'Recovered Frayed Gold Spool: metallic thread identical to the kintsugi seams of your garment.',
+            'gold',
+            4400
+          );
+          this.saveCheckpoint('loom_clue_1');
+        },
+      })
+    );
+
+    // Optional Hidden Quest (hq_silent_loom): Clue 2 in Echoing Underwalk
+    this.interactables.push(
+      new Interactable(this, {
+        id: 'clue_loom_2',
+        x: 3480,
+        y: 696,
+        radius: 68,
+        kind: 'loom_clue',
+        isActivated: () => Boolean(this.worldFlags['loom_clue_2']),
+        getPrompt: () =>
+          this.worldFlags['loom_clue_2'] ? null : 'Examine Astral Weaver Spindle',
+        onInteract: () => {
+          if (this.worldFlags['loom_clue_2']) return;
+          this.worldFlags['loom_clue_2'] = true;
+          this.soulAffinities.silver += 1;
+          AudioManager.getInstance().playConduitAttune();
+          this.questManager.completeObjective('hq_silent_loom', 'obj_loom_spindle');
+          this.hud.showToast(
+            'Recovered Astral Weaver Spindle: its notch resonates toward a sealed coffer beneath the Verge.',
+            'gold',
+            4400
+          );
+          this.saveCheckpoint('loom_clue_2');
+        },
+      })
+    );
+
+    // Optional Hidden Quest (hq_silent_loom): Sealed Reliquary Loom in Sunken Sanctum
+    this.interactables.push(
+      new Interactable(this, {
+        id: 'reliquary_loom',
+        x: 2960,
+        y: 1114,
+        radius: 74,
+        kind: 'loom_reliquary',
+        isActivated: () => Boolean(this.worldFlags['loom_reliquary_opened']),
+        getPrompt: () => {
+          if (this.worldFlags['loom_reliquary_opened']) return 'Inspect Opened Weaver Reliquary';
+          const ready =
+            Boolean(this.worldFlags['loom_clue_1']) && Boolean(this.worldFlags['loom_clue_2']);
+          return ready ? 'Unseal Reliquary Loom with Weaver Tools' : 'Inspect Sealed Reliquary Loom';
+        },
+        onInteract: () => {
+          if (this.worldFlags['loom_reliquary_opened']) {
+            this.hud.showToast(
+              'An inscription inside reads: "For the unbodied traveller, until the outer mist parts."',
+              'gold',
+              4000
+            );
+            return;
+          }
+          const hasBoth =
+            Boolean(this.worldFlags['loom_clue_1']) && Boolean(this.worldFlags['loom_clue_2']);
+          if (!hasBoth) {
+            this.questManager.startQuest('hq_silent_loom');
+            AudioManager.getInstance().playDialogueBlip();
+            this.hud.showToast(
+              'Two recesses await missing weaver relics: a gold spool from a high western cliff, and a spindle from the underwalk.',
+              'cyan',
+              4600
+            );
+            return;
+          }
+
+          this.worldFlags['loom_reliquary_opened'] = true;
+          this.relics.add('relic_compass_lens');
+          if (this.adventurerRank === 'G') {
+            this.adventurerRank = 'F';
+          }
+          this.soulAffinities.silver += 2;
+          AudioManager.getInstance().playQuestChime();
+          this.questManager.completeObjective('hq_silent_loom', 'obj_loom_reliquary');
+          this.events.emit(GAME_EVENTS.RELIC_ACQUIRED, RELIC_DEFINITIONS.relic_compass_lens);
+          this.explorationManager.updatePlayerPosition(
+            this.player.sprite.x,
+            this.player.sprite.y,
+            this.getMapRevealRadius()
+          );
+          this.hud.refresh();
+          this.saveCheckpoint('reliquary_loom_unsealed');
+        },
       })
     );
 
@@ -733,7 +1425,7 @@ export class GameScene extends Phaser.Scene {
         id: 'reset_courtyard_block',
         x: 625,
         y: 814,
-        radius: 52,
+        radius: 54,
         kind: 'reset_rune',
         getPrompt: () =>
           this.remnantManager.hasWeight() && !this.worldFlags['courtyard_unsealed']
@@ -753,7 +1445,7 @@ export class GameScene extends Phaser.Scene {
         id: 'reset_sanctum_block',
         x: 2132,
         y: 1114,
-        radius: 50,
+        radius: 52,
         kind: 'reset_rune',
         getPrompt: () =>
           this.remnantManager.hasWeight() && !this.worldFlags['sanctum_final_unsealed']
@@ -768,13 +1460,13 @@ export class GameScene extends Phaser.Scene {
       })
     );
 
-    // Chapter 5: Vespera & the Memory Crucible
+    // Vespera & the Memory Crucible
     this.interactables.push(
       new Interactable(this, {
         id: 'npc_vespera',
-        x: 3280,
+        x: 3680,
         y: 1114,
-        radius: 82,
+        radius: 84,
         kind: 'npc',
         getPrompt: () =>
           this.imprintManager.getCurrentId() === 'resolve'
@@ -784,13 +1476,13 @@ export class GameScene extends Phaser.Scene {
       })
     );
 
-    // Prototype Ending Threshold: The Fractured Mirror-Arch
+    // Chapter One Ending Threshold: The Fractured Mirror-Arch
     this.interactables.push(
       new Interactable(this, {
         id: 'ending_arch',
-        x: 4180,
+        x: 5060,
         y: 1112,
-        radius: 84,
+        radius: 88,
         kind: 'ending_arch',
         getPrompt: () => 'Gaze Into the Fractured Mirror-Arch',
         onInteract: () => this.triggerEndingSequence(),
@@ -811,7 +1503,7 @@ export class GameScene extends Phaser.Scene {
           id: ep.id,
           x: ep.x,
           y: ep.y,
-          radius: 64,
+          radius: 66,
           kind: 'echo',
           isActivated: () => this.discoveredEchoes.has(ep.id),
           getPrompt: () =>
@@ -822,6 +1514,7 @@ export class GameScene extends Phaser.Scene {
             AudioManager.getInstance().playConduitAttune();
             this.hud.showToast(`${def.title}: ${def.inscription}`, 'cyan', 5200);
             if (firstTime) {
+              this.soulAffinities.azure += 1;
               this.events.emit(GAME_EVENTS.ECHO_DISCOVERED, def);
               this.saveCheckpoint(`echo_${ep.id}`);
             }
@@ -832,17 +1525,25 @@ export class GameScene extends Phaser.Scene {
   }
 
   private evaluateGateSeals(silent = false): void {
-    // 1. Crucible Gate (North + East Conduits)
-    const crucibleCount =
+    // 1. Outer Spire Gate -> Shattered Sky-Arch (North + East Conduits)
+    const spireCount =
       (this.worldFlags['conduit_north'] ? 1 : 0) + (this.worldFlags['conduit_east'] ? 1 : 0);
-    const crucibleChanged = this.gates.get('gate_crucible')?.setSealProgress(crucibleCount);
-    if (crucibleChanged && crucibleCount === 2 && !silent) {
+    const spireChanged = this.gates.get('gate_spire_outer')?.setSealProgress(spireCount);
+    if (spireChanged && spireCount === 2 && !silent) {
       AudioManager.getInstance().playMechanismActivate();
       this.cameras.main.shake(180, 0.004);
-      this.hud.showToast('Both wind conduits resonate — the Crucible of Mass unseals!', 'gold', 4000);
+      this.hud.showToast(
+        'Both Wind-Spire Conduits resonate! The gate to the Shattered Sky-Arch opens.',
+        'gold',
+        4200
+      );
     }
 
-    // 2. Courtyard Sunken Entry Gate (latches permanently once both plates are simultaneously active)
+    // 2. Crucible Entry Gate (opened by Aerial Resonance Bell)
+    const bellActive = this.worldFlags['sky_bell_rung'] ? 1 : 0;
+    this.gates.get('gate_crucible_entry')?.setSealProgress(bellActive);
+
+    // 3. Courtyard Sunken Entry Gate (latches permanently once both plates are simultaneously active)
     if (this.worldFlags['courtyard_unsealed']) {
       this.gates.get('gate_sunken_entry')?.setSealProgress(2);
     } else {
@@ -867,7 +1568,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // 3. Sanctum Mid Vault Gate
+    // 4. Sanctum Mid Vault Gate
     const innerActive =
       this.worldFlags['sanctum_inner_latched'] ||
       this.plates.get('plate_sanctum_inner')?.isDepressed()
@@ -875,7 +1576,7 @@ export class GameScene extends Phaser.Scene {
         : 0;
     this.gates.get('gate_sanctum_mid')?.setSealProgress(innerActive);
 
-    // 4. Sanctum Final Gate (Inner Seal + Heavy Block Gate Plate; latches once both engage)
+    // 5. Sanctum Final Gate (Inner Seal + Heavy Block Gate Plate; latches once both engage)
     if (this.worldFlags['sanctum_final_unsealed']) {
       this.gates.get('gate_sanctum_final')?.setSealProgress(2);
     } else {
@@ -894,7 +1595,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // 5. Final Threshold Gate (opens once Chapter 5 choice is made)
+    // 6. Final Threshold Gate (opens once Vespera choice is made)
     this.gates
       .get('gate_threshold')
       ?.setSealProgress(this.imprintManager.getCurrentId() !== null ? 1 : 0);
@@ -905,20 +1606,53 @@ export class GameScene extends Phaser.Scene {
       this,
       this.questManager,
       this.remnantManager,
-      this.imprintManager.getCurrent()
+      this.explorationManager,
+      this.imprintManager.getCurrent(),
+      () => ({
+        playerName: this.playerName,
+        adventurerRank: this.adventurerRank,
+        relicCount: this.relics.size,
+      })
     );
+
     this.dialogueBox = new DialogueBox(this, this.dialogueManager);
     this.restorationOverlay = new RestorationOverlay(this);
+
+    this.worldMap = new WorldMap(this, this.explorationManager, () => ({
+      x: this.player.sprite.x,
+      y: this.player.sprite.y,
+      name: this.playerName,
+      rank: this.adventurerRank,
+      hasCompassRelic: this.relics.has('relic_compass_lens'),
+    }));
+
     this.journal = new Journal(
       this,
       this.questManager,
       this.remnantManager,
       this.imprintManager,
-      () => Array.from(this.discoveredEchoes)
+      this.explorationManager,
+      () => ({
+        playerName: this.playerName,
+        adventurerRank: this.adventurerRank,
+        discoveredEchoes: Array.from(this.discoveredEchoes),
+        relics: Array.from(this.relics),
+        soulAffinities: { ...this.soulAffinities },
+      }),
+      () => {
+        this.worldMap.open();
+        this.syncControlLock();
+      }
     );
+
     this.pauseMenu = new PauseMenu(this, {
       onResume: () => {
         this.pauseMenu.close();
+        this.syncControlLock();
+      },
+      onOpenAtlas: () => {
+        this.pauseMenu.close();
+        this.worldMap.open();
         this.syncControlLock();
       },
       onOpenJournal: () => {
@@ -931,8 +1665,22 @@ export class GameScene extends Phaser.Scene {
       },
       onRestart: () => {
         this.pauseMenu.close();
-        SaveManager.clear();
-        this.scene.restart({ loadSaved: false });
+        this.confirmModal.open({
+          kicker: 'Erase Saved Progress',
+          title: 'RESTART CHAPTER ONE?',
+          body: 'Restarting Chapter One will permanently delete your saved progress and return your garment to the Awakening Precipice.\n\nChoose Cancel to preserve all current progress.',
+          cancelLabel: 'Cancel (Keep Save)',
+          confirmLabel: 'Confirm Restart',
+          onCancel: () => {
+            this.pauseMenu.open();
+            this.syncControlLock();
+          },
+          onConfirm: () => {
+            SaveManager.clear();
+            this.scene.restart({ loadSaved: false, playerName: this.playerName });
+          },
+        });
+        this.syncControlLock();
       },
       onMainMenu: () => {
         this.pauseMenu.close();
@@ -942,6 +1690,8 @@ export class GameScene extends Phaser.Scene {
         });
       },
     });
+
+    this.confirmModal = new ConfirmModal(this);
   }
 
   private setupInput(): void {
@@ -955,22 +1705,61 @@ export class GameScene extends Phaser.Scene {
     this.keyE = kb.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.keyEnter = kb.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
     this.keyJ = kb.addKey(Phaser.Input.Keyboard.KeyCodes.J);
+    this.keyH = kb.addKey(Phaser.Input.Keyboard.KeyCodes.H);
+    this.keyV = kb.addKey(Phaser.Input.Keyboard.KeyCodes.V);
+    this.keyTab = kb.addKey(Phaser.Input.Keyboard.KeyCodes.TAB);
     this.keyM = kb.addKey(Phaser.Input.Keyboard.KeyCodes.M);
     this.keyEsc = kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
     this.keyOne = kb.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
     this.keyTwo = kb.addKey(Phaser.Input.Keyboard.KeyCodes.TWO);
   }
 
-  private setupCamera(): void {
+  private setupCameras(): void {
     const cam = this.cameras.main;
+    cam.setZoom(WORLD_CAMERA_ZOOM);
     cam.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-    cam.startFollow(this.player.sprite, true, 0.09, 0.09, 0, 26);
+    cam.startFollow(this.player.sprite, true, 0.09, 0.09, 0, 22);
+
+    // Dedicated 1:1 Full HD UI Camera so HUD, Journal, Dialogue & Atlas stay razor-sharp
+    this.uiCamera = this.cameras.add(0, 0, GAME_WIDTH, GAME_HEIGHT, false, 'UICamera');
+    this.uiCamera.setScroll(0, 0);
+    this.uiCamera.setZoom(1);
+
+    const uiRoots = [
+      this.vignetteImage,
+      ...this.hud.getRootObjects(),
+      ...this.dialogueBox.getRootObjects(),
+      ...this.restorationOverlay.getRootObjects(),
+      ...this.journal.getRootObjects(),
+      ...this.worldMap.getRootObjects(),
+      ...this.pauseMenu.getRootObjects(),
+      ...this.confirmModal.getRootObjects(),
+    ];
+    for (const obj of uiRoots) {
+      this.uiObjects.add(obj);
+    }
+
+    cam.ignore(uiRoots);
+    this.syncUiCameraIgnores();
+  }
+
+  private syncUiCameraIgnores(): void {
+    if (!this.uiCamera) return;
+    const list = this.children.list;
+    for (let i = 0; i < list.length; i++) {
+      const child = list[i];
+      if (!this.uiObjects.has(child) && !this.uiIgnoredObjects.has(child)) {
+        this.uiCamera.ignore(child);
+        this.uiIgnoredObjects.add(child);
+      }
+    }
   }
 
   private openDialogue(treeId: string): void {
     if (this.dialogueBox.isVisible() || this.isRestoringSequence || this.isEndingSequence) return;
 
     const node = this.dialogueManager.start(treeId, {
+      playerName: this.playerName,
       hasWeight: this.remnantManager.hasWeight(),
       imprint: this.imprintManager.getCurrentId(),
       flags: this.worldFlags,
@@ -1005,6 +1794,8 @@ export class GameScene extends Phaser.Scene {
 
       case 'choose_imprint_resonance':
         if (this.imprintManager.acquire('resonance')) {
+          this.soulAffinities.verdant += 2;
+          this.soulAffinities.azure += 1;
           this.player.setImprint('resonance');
           this.npcs.get('vespera')?.setImprintState('resonance');
           this.questManager.completeObjective('q_changed_world', 'obj_meet_vespera');
@@ -1015,6 +1806,8 @@ export class GameScene extends Phaser.Scene {
 
       case 'choose_imprint_resolve':
         if (this.imprintManager.acquire('resolve')) {
+          this.soulAffinities.crimson += 2;
+          this.soulAffinities.violet += 1;
           this.player.setImprint('resolve');
           this.npcs.get('vespera')?.setImprintState('resolve');
           this.questManager.completeObjective('q_changed_world', 'obj_meet_vespera');
@@ -1026,16 +1819,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Executes the Chapter 3 Remnant of Weight restoration ceremony exactly once.
+   * Executes the Crucible of Mass Remnant of Weight stabilization rite once all 3 locks are unsealed.
    */
   private triggerWeightRestoration(): void {
     if (this.remnantManager.hasWeight() || this.isRestoringSequence) return;
+    if (this.getCrucibleLocksReleasedCount() < 3) return;
 
     this.isRestoringSequence = true;
     this.syncControlLock();
 
     AudioManager.getInstance().playRestorationSequence();
-    this.cameras.main.zoomTo(1.24, 1800, 'Sine.easeInOut');
+    this.cameras.main.zoomTo(WORLD_CAMERA_ZOOM * 1.18, 1800, 'Sine.easeInOut');
 
     const progressHolder = { t: 0 };
     this.tweens.add({
@@ -1050,6 +1844,10 @@ export class GameScene extends Phaser.Scene {
         this.player.setRestoringVisual(false);
         this.remnantManager.restore('weight');
         this.player.applyWeightRestoration(true);
+        this.soulAffinities.amber += 2;
+        if (this.adventurerRank === 'G') {
+          this.adventurerRank = 'F';
+        }
 
         for (const block of this.blocks.values()) {
           block.syncWeightCapability(true);
@@ -1057,13 +1855,17 @@ export class GameScene extends Phaser.Scene {
 
         this.cameras.main.flash(380, 232, 169, 72);
         this.cameras.main.shake(280, 0.009);
-        this.cameras.main.zoomTo(1, 800, 'Sine.easeOut');
+        this.cameras.main.zoomTo(WORLD_CAMERA_ZOOM, 800, 'Sine.easeOut');
 
-        // Ensure earlier objectives mark complete cleanly
+        // Ensure all Echoes of Substance stages record completion cleanly
+        this.questManager.completeObjective('q_echoes_of_substance', 'obj_inspect_survey');
         this.questManager.completeObjective('q_echoes_of_substance', 'obj_conduit_north');
         this.questManager.completeObjective('q_echoes_of_substance', 'obj_conduit_east');
+        this.questManager.completeObjective('q_echoes_of_substance', 'obj_sky_arch_bell');
+        this.questManager.completeObjective('q_echoes_of_substance', 'obj_crucible_locks');
         this.questManager.completeObjective('q_echoes_of_substance', 'obj_claim_weight');
 
+        this.hud.refresh();
         this.saveCheckpoint('weight_restored');
 
         this.time.delayedCall(520, () => {
@@ -1083,20 +1885,26 @@ export class GameScene extends Phaser.Scene {
     this.syncControlLock();
 
     this.questManager.completeObjective('q_changed_world', 'obj_cross_threshold');
+    this.saveCheckpoint('chapter_one_complete');
     AudioManager.getInstance().playConduitAttune();
-    this.cameras.main.zoomTo(1.18, 1600, 'Sine.easeInOut');
+    this.cameras.main.zoomTo(WORLD_CAMERA_ZOOM * 1.15, 1600, 'Sine.easeInOut');
     this.hud.showToast(
-      '"Look upon the chains within the mirror—they were struck open from the inside."',
+      '"Look upon the chains within the mirror: they were struck open from the inside."',
       'gold',
-      3000
+      3100
     );
 
-    this.time.delayedCall(2200, () => {
+    this.time.delayedCall(2300, () => {
       this.cameras.main.fadeOut(900, 7, 9, 19);
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
         this.scene.start(SCENE_KEYS.ENDING, {
+          playerName: this.playerName,
+          adventurerRank: this.adventurerRank,
           imprint: this.imprintManager.getCurrentId(),
           echoCount: this.discoveredEchoes.size,
+          regionExplorationPct: this.explorationManager.getRegionExplorationPercent(),
+          worldExplorationPct: this.explorationManager.getWorldExplorationPercent(),
+          relicCount: this.relics.size,
         });
       });
     });
@@ -1109,12 +1917,16 @@ export class GameScene extends Phaser.Scene {
       this.dialogueBox.isVisible() ||
       this.restorationOverlay.isOpen() ||
       this.journal.isOpen() ||
-      this.pauseMenu.isOpen();
+      this.worldMap.isOpen() ||
+      this.pauseMenu.isOpen() ||
+      this.confirmModal.isOpen();
     this.player.setControlsLocked(locked);
   }
 
   private saveCheckpoint(checkpointId: string): void {
     SaveManager.save({
+      playerName: this.playerName,
+      adventurerRank: this.adventurerRank,
       chapter: this.currentChapter,
       chapterTitle: this.currentChapterTitle,
       checkpointId,
@@ -1123,6 +1935,10 @@ export class GameScene extends Phaser.Scene {
       restoredRemnants: this.remnantManager.getAllRestored(),
       imprint: this.imprintManager.getCurrentId(),
       discoveredEchoes: Array.from(this.discoveredEchoes),
+      discoveredCells: this.explorationManager.getDiscoveredCells(),
+      discoveredLocations: this.explorationManager.getDiscoveredLocations(),
+      relics: Array.from(this.relics),
+      soulAffinities: { ...this.soulAffinities },
       worldFlags: { ...this.worldFlags },
       questStates: this.questManager.serialize(),
     });
@@ -1133,11 +1949,18 @@ export class GameScene extends Phaser.Scene {
       this.blockTouchToastCooldownMs -= delta;
     }
 
-    // Parallax scrolling synchronized to camera
+    const t = time * 0.001;
     const cam = this.cameras.main;
-    this.parallaxFar.tilePositionX = cam.scrollX * 0.11;
-    this.parallaxMid.tilePositionX = cam.scrollX * 0.26;
-    this.parallaxNear.tilePositionX = cam.scrollX * 0.46;
+    this.parallaxFar.tilePositionX = cam.scrollX * 0.12;
+    this.parallaxMid.tilePositionX = cam.scrollX * 0.27;
+    this.parallaxNear.tilePositionX = cam.scrollX * 0.48;
+
+    for (let i = 0; i < this.mistBands.length; i++) {
+      const mb = this.mistBands[i];
+      mb.sprite.x = mb.baseX + Math.sin(t * mb.speed + i * 1.4) * mb.amp;
+    }
+
+    this.renderAnimatedWorldProps(time);
 
     // Global audio toggle
     if (Phaser.Input.Keyboard.JustDown(this.keyM)) {
@@ -1146,7 +1969,31 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Handle modal / overlay inputs in priority order
-    if (this.restorationOverlay.isOpen()) {
+    if (this.confirmModal.isOpen()) {
+      if (Phaser.Input.Keyboard.JustDown(this.keyEsc)) {
+        this.confirmModal.cancel();
+      } else if (
+        Phaser.Input.Keyboard.JustDown(this.cursors.left) ||
+        Phaser.Input.Keyboard.JustDown(this.keyA) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
+        Phaser.Input.Keyboard.JustDown(this.keyW)
+      ) {
+        this.confirmModal.moveSelection(-1);
+      } else if (
+        Phaser.Input.Keyboard.JustDown(this.cursors.right) ||
+        Phaser.Input.Keyboard.JustDown(this.keyD) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.down) ||
+        Phaser.Input.Keyboard.JustDown(this.keyS)
+      ) {
+        this.confirmModal.moveSelection(1);
+      } else if (
+        Phaser.Input.Keyboard.JustDown(this.keySpace) ||
+        Phaser.Input.Keyboard.JustDown(this.keyEnter) ||
+        Phaser.Input.Keyboard.JustDown(this.keyE)
+      ) {
+        this.confirmModal.confirmSelection();
+      }
+    } else if (this.restorationOverlay.isOpen()) {
       if (
         Phaser.Input.Keyboard.JustDown(this.keySpace) ||
         Phaser.Input.Keyboard.JustDown(this.keyE) ||
@@ -1175,12 +2022,33 @@ export class GameScene extends Phaser.Scene {
       ) {
         this.pauseMenu.confirm();
       }
+    } else if (this.worldMap.isOpen()) {
+      this.worldMap.update(time);
+      if (
+        Phaser.Input.Keyboard.JustDown(this.keyTab) ||
+        Phaser.Input.Keyboard.JustDown(this.keyEsc)
+      ) {
+        this.worldMap.close();
+        this.syncControlLock();
+      } else if (Phaser.Input.Keyboard.JustDown(this.keyV)) {
+        this.worldMap.switchViewMode();
+      } else if (Phaser.Input.Keyboard.JustDown(this.keyOne)) {
+        this.worldMap.switchViewMode('regional');
+      } else if (Phaser.Input.Keyboard.JustDown(this.keyTwo)) {
+        this.worldMap.switchViewMode('world');
+      }
     } else if (this.journal.isOpen()) {
       if (
         Phaser.Input.Keyboard.JustDown(this.keyJ) ||
         Phaser.Input.Keyboard.JustDown(this.keyEsc)
       ) {
         this.journal.close();
+        this.syncControlLock();
+      } else if (Phaser.Input.Keyboard.JustDown(this.keyH)) {
+        this.journal.toggleHints();
+      } else if (Phaser.Input.Keyboard.JustDown(this.keyTab)) {
+        this.journal.close();
+        this.worldMap.open();
         this.syncControlLock();
       }
     } else if (this.dialogueBox.isVisible()) {
@@ -1207,9 +2075,11 @@ export class GameScene extends Phaser.Scene {
         this.dialogueBox.confirmOrAdvance();
       }
     } else if (!this.isRestoringSequence && !this.isEndingSequence) {
-      // Standard gameplay hotkeys
       if (Phaser.Input.Keyboard.JustDown(this.keyEsc)) {
         this.pauseMenu.open();
+        this.syncControlLock();
+      } else if (Phaser.Input.Keyboard.JustDown(this.keyTab)) {
+        this.worldMap.open();
         this.syncControlLock();
       } else if (Phaser.Input.Keyboard.JustDown(this.keyJ)) {
         this.journal.open();
@@ -1253,10 +2123,20 @@ export class GameScene extends Phaser.Scene {
       jumpJustReleased: Phaser.Input.Keyboard.JustUp(this.keySpace),
     });
 
+    // Update Exploration fog-of-war & landmark discovery
+    const mapUpdated = this.explorationManager.updatePlayerPosition(
+      this.player.sprite.x,
+      this.player.sprite.y,
+      this.getMapRevealRadius()
+    );
+    if (mapUpdated) {
+      this.hud.refresh();
+    }
+
     // Immortal abyss reformation if fallen below world floor
     if (this.player.sprite.y > WORLD_HEIGHT - 28) {
       this.player.respawnAtLastSafe();
-      this.hud.showToast('Death cannot claim an unwritten form.', 'cyan', 2600);
+      this.hud.showToast('Death cannot claim an unbodied presence.', 'cyan', 2600);
     }
 
     // Quest objective auto-detection for crossing the Zone 1 Updraft Chasm
@@ -1264,7 +2144,6 @@ export class GameScene extends Phaser.Scene {
       this.questManager.completeObjective('q_awakening_verge', 'obj_cross_chasm');
     }
 
-    // Check Chapter triggers
     this.checkChapterZones();
 
     // Update world objects
@@ -1286,7 +2165,8 @@ export class GameScene extends Phaser.Scene {
       npc.update(time);
     }
 
-    // Update proximity interactables
+    // Update proximity interactables & Wayfarer's Compass-Lens resonance
+    this.updateCompassLensProximity(time);
     const nearest = this.findNearestActiveInteractable();
     for (const inter of this.interactables) {
       inter.setInRange(inter === nearest && !this.player.isControlsLocked());
@@ -1294,6 +2174,122 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.renderConduitTraces(time);
+    this.syncUiCameraIgnores();
+  }
+
+  private useCounterweightLift(
+    destX: number,
+    destY: number,
+    toast: string,
+    surveyPoints?: Array<[number, number]>
+  ): void {
+    AudioManager.getInstance().playMechanismActivate();
+    const body = this.player.sprite.body as Phaser.Physics.Arcade.Body;
+    this.player.sprite.setPosition(destX, destY);
+    body.setVelocity(0, 0);
+    body.setAcceleration(0, 0);
+    this.player.recordSafePosition(destX, destY + 4);
+
+    const radius = this.getMapRevealRadius();
+    if (surveyPoints) {
+      for (const [sx, sy] of surveyPoints) {
+        this.explorationManager.updatePlayerPosition(sx, sy, radius);
+      }
+    }
+    this.explorationManager.updatePlayerPosition(destX, destY, radius);
+    this.hud.refresh();
+    this.hud.showToast(toast, 'gold', 3400);
+  }
+
+  private updateCompassLensProximity(time: number): void {
+    this.compassGfx.clear();
+    const equipped = this.relics.has('relic_compass_lens');
+    if (!equipped) {
+      if (this.compassSensedIds.length > 0) {
+        this.compassSensedIds = [];
+      }
+      for (const inter of this.interactables) {
+        if (inter.getCompassResonance() > 0) {
+          inter.setCompassResonance(0);
+        }
+      }
+      return;
+    }
+
+    const px = this.player.sprite.x;
+    const py = this.player.sprite.y;
+    const sensed: string[] = [];
+    let nearestTarget: Interactable | null = null;
+    let nearestDist = Infinity;
+
+    for (const inter of this.interactables) {
+      if (!inter.isHiddenInscriptionCandidate()) {
+        if (inter.getCompassResonance() > 0) {
+          inter.setCompassResonance(0);
+        }
+        continue;
+      }
+
+      const dist = Phaser.Math.Distance.Between(px, py, inter.config.x, inter.config.y);
+      if (dist <= GameScene.COMPASS_SENSE_RADIUS) {
+        const strength = Phaser.Math.Clamp(
+          1 - dist / GameScene.COMPASS_SENSE_RADIUS,
+          0.22,
+          1
+        );
+        inter.setCompassResonance(strength);
+        sensed.push(inter.config.id);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestTarget = inter;
+        }
+      } else if (inter.getCompassResonance() > 0) {
+        inter.setCompassResonance(0);
+      }
+    }
+
+    this.compassSensedIds = sensed;
+
+    if (nearestTarget) {
+      const t = time * 0.001;
+      const strength = nearestTarget.getCompassResonance();
+      const angle = Phaser.Math.Angle.Between(
+        px,
+        py - 4,
+        nearestTarget.config.x,
+        nearestTarget.config.y - 6
+      );
+      const pulse = 0.5 + 0.5 * Math.sin(t * 3.1);
+      const ringR = 34;
+
+      // Subtle outer astrolabe arc & directional pointer around the Stabilizing Garment
+      this.compassGfx.lineStyle(
+        1.4,
+        PALETTE.GARMENT_GOLD_BRIGHT,
+        (0.24 + pulse * 0.2) * strength
+      );
+      this.compassGfx.beginPath();
+      this.compassGfx.arc(px, py - 4, ringR, angle - 0.52, angle + 0.52);
+      this.compassGfx.strokePath();
+
+      const tipX = px + Math.cos(angle) * (ringR + 5);
+      const tipY = py - 4 + Math.sin(angle) * (ringR + 5);
+      const leftX = px + Math.cos(angle - 0.14) * (ringR - 1);
+      const leftY = py - 4 + Math.sin(angle - 0.14) * (ringR - 1);
+      const rightX = px + Math.cos(angle + 0.14) * (ringR - 1);
+      const rightY = py - 4 + Math.sin(angle + 0.14) * (ringR - 1);
+
+      this.compassGfx.fillStyle(
+        PALETTE.ETHEREAL_CYAN,
+        (0.36 + pulse * 0.24) * strength
+      );
+      this.compassGfx.beginPath();
+      this.compassGfx.moveTo(tipX, tipY);
+      this.compassGfx.lineTo(leftX, leftY);
+      this.compassGfx.lineTo(rightX, rightY);
+      this.compassGfx.closePath();
+      this.compassGfx.fillPath();
+    }
   }
 
   private findNearestActiveInteractable(): Interactable | null {
@@ -1356,7 +2352,7 @@ export class GameScene extends Phaser.Scene {
       this.conduitLinesGfx.strokePath();
     };
 
-    // Puzzle 1 spire traces -> Crucible Gate
+    // Wind-Spire Conduits -> Outer Spire Gate (x=3210)
     drawTrace(
       [
         [2130, 300],
@@ -1373,6 +2369,45 @@ export class GameScene extends Phaser.Scene {
         [3210, 500],
       ],
       Boolean(this.worldFlags['conduit_east']),
+      PALETTE.ETHEREAL_CYAN
+    );
+
+    // Aerial Resonance Bell -> Crucible Entry Gate (x=4120)
+    drawTrace(
+      [
+        [3760, 330],
+        [3955, 420],
+        [4120, 470],
+      ],
+      Boolean(this.worldFlags['sky_bell_rung']),
+      PALETTE.REMNANT_GOLD
+    );
+
+    // 3 Crucible Stabilization Locks -> Central Remnant Containment Dais (x=4480, y=514)
+    drawTrace(
+      [
+        [4255, 430],
+        [4360, 480],
+        [4480, 514],
+      ],
+      Boolean(this.worldFlags['crucible_lock_west']),
+      PALETTE.REMNANT_GOLD
+    );
+    drawTrace(
+      [
+        [4795, 430],
+        [4620, 480],
+        [4480, 514],
+      ],
+      Boolean(this.worldFlags['crucible_lock_east']),
+      PALETTE.REMNANT_GOLD
+    );
+    drawTrace(
+      [
+        [4480, 262],
+        [4480, 514],
+      ],
+      Boolean(this.worldFlags['crucible_lock_zenith']),
       PALETTE.ETHEREAL_CYAN
     );
 
@@ -1418,4 +2453,3 @@ export class GameScene extends Phaser.Scene {
     );
   }
 }
-

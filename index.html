@@ -4,13 +4,56 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>A FORM UNWRITTEN</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0e1a'/%3E%3Ccircle cx='32' cy='32' r='18' fill='none' stroke='%237ee8fa' stroke-width='2.5' stroke-dasharray='8 5'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%23e8a948'/%3E%3C/svg%3E" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0e1a'/%3E%3Ccircle cx='32' cy='32' r='18' fill='none' stroke='%23e6ac4c' stroke-width='2.5' stroke-dasharray='8 5'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%237ee8fa'/%3E%3C/svg%3E"
+    />
   </head>
   <body>
     <main id="game-shell" aria-label="A Form Unwritten Game Viewport">
       <div id="game-container"></div>
     </main>
+
+    <dialog id="name-dialog" aria-labelledby="name-dialog-title">
+      <form id="name-dialog-form" method="dialog" class="name-dialog-surface">
+        <p class="name-dialog-kicker">CHRONICLE INSCRIPTION</p>
+        <h2 id="name-dialog-title">Choose a Name for Your Journey</h2>
+        <p class="name-dialog-lore">
+          You awaken without physical flesh or memory, given shape only by a charcoal and gold stabilizing garment. Choose the name by which wayfarers and guild ledgers will know you.
+        </p>
+
+        <div class="name-field-group">
+          <label for="player-name-input">Wayfarer Name</label>
+          <input
+            type="text"
+            id="player-name-input"
+            name="player_name"
+            maxlength="24"
+            placeholder="The Unwritten"
+            aria-describedby="player-name-help"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+            enterkeyhint="done"
+            autofocus
+          />
+          <p id="player-name-help" class="name-field-hint">
+            Up to 24 characters. Leave blank to step forth as "The Unwritten".
+          </p>
+        </div>
+
+        <div class="name-dialog-actions">
+          <button type="submit" value="confirm" class="btn-primary">
+            Step Into the Verge
+          </button>
+          <button type="submit" value="cancel" class="btn-secondary" formnovalidate>
+            Return to Title
+          </button>
+        </div>
+      </form>
+    </dialog>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
-

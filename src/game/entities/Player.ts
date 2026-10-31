@@ -22,6 +22,13 @@ export interface PlayerInputSnapshot {
   jumpJustReleased: boolean;
 }
 
+/**
+ * Playable protagonist rendered canonically as the Stabilizing Garment:
+ * layered charcoal and dark-ash robes, parchment-lined flowing mantle,
+ * antique gold waist-ring clasp, kintsugi-gold seams, and a completely
+ * concealed void face beneath swept silver-ash garment folds.
+ * No exposed human anatomy or cyan astral body is ever shown in gameplay.
+ */
 export class Player {
   public readonly sprite: Phaser.Physics.Arcade.Sprite;
   private readonly scene: Phaser.Scene;
@@ -80,19 +87,19 @@ export class Player {
     this.gfx = scene.add.graphics();
     this.gfx.setDepth(30);
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       this.cloakTrail.push({ x, y });
     }
 
-    this.auraEmitter = scene.add.particles(0, 0, 'tex_mote_cyan', {
-      x: { min: -12, max: 12 },
-      y: { min: -22, max: 18 },
-      speedY: { min: -28, max: -8 },
-      speedX: { min: -10, max: 10 },
-      scale: { start: 0.34, end: 0 },
-      alpha: { start: 0.55, end: 0 },
-      lifespan: 1100,
-      frequency: 95,
+    this.auraEmitter = scene.add.particles(0, 0, 'tex_mote_gold', {
+      x: { min: -11, max: 11 },
+      y: { min: -20, max: 18 },
+      speedY: { min: -24, max: -6 },
+      speedX: { min: -9, max: 9 },
+      scale: { start: 0.28, end: 0 },
+      alpha: { start: 0.42, end: 0 },
+      lifespan: 1050,
+      frequency: initialHasWeight ? 155 : 115,
       blendMode: 'ADD',
     });
     this.auraEmitter.setDepth(29);
@@ -139,7 +146,7 @@ export class Player {
   }
 
   public triggerInteractAnim(): void {
-    this.interactPulseMs = 320;
+    this.interactPulseMs = 340;
   }
 
   public setRestoringVisual(active: boolean, progress = 0): void {
@@ -158,13 +165,8 @@ export class Player {
     this.impactWindupMs = 0;
     this.applyPhysicsProfile();
 
-    if (hasWeight) {
-      this.auraEmitter.setTexture('tex_mote_gold');
-      this.auraEmitter.setFrequency(150);
-    } else {
-      this.auraEmitter.setTexture('tex_mote_cyan');
-      this.auraEmitter.setFrequency(95);
-    }
+    this.auraEmitter.setTexture('tex_mote_gold');
+    this.auraEmitter.setFrequency(hasWeight ? 155 : 115);
   }
 
   public recordSafePosition(x: number, y: number): void {
@@ -204,7 +206,7 @@ export class Player {
         this.emitLandingBurst(true);
         this.onGroundImpactCallback?.(this.sprite.x, this.sprite.y + 26);
       } else {
-        this.landingSquash = this.hasWeight ? 0.26 : 0.12;
+        this.landingSquash = this.hasWeight ? 0.26 : 0.14;
         AudioManager.getInstance().playLand(this.hasWeight);
         if (this.hasWeight) {
           this.emitLandingBurst(false);
@@ -229,6 +231,8 @@ export class Player {
     }
     if (this.landingSquash > 0) {
       this.landingSquash = Math.max(0, this.landingSquash - delta * 0.0014);
+    } else if (this.landingSquash < 0) {
+      this.landingSquash = Math.min(0, this.landingSquash + delta * 0.0018);
     }
 
     if (this.controlsLocked) {
@@ -237,13 +241,13 @@ export class Player {
       if (this.animState !== 'restoring') {
         this.animState = onGround ? 'idle' : 'fall';
       }
-      this.updateCloakTrail();
-      this.render(time);
+      this.updateCloakTrail(time, body.velocity.x, body.velocity.y);
+      this.render(time, onGround);
       this.wasOnGround = onGround;
       return;
     }
 
-    // Ground Impact windup & plunge (Post-Weight only)
+    // Ground Impact windup & plunge (Grounded State only)
     if (this.isGroundImpacting) {
       body.setVelocityX(0);
       body.setAccelerationX(0);
@@ -255,18 +259,18 @@ export class Player {
         body.setVelocityY(860);
       }
       this.animState = 'ground_impact';
-      this.updateCloakTrail();
-      this.render(time);
+      this.updateCloakTrail(time, body.velocity.x, body.velocity.y);
+      this.render(time, onGround);
       this.wasOnGround = onGround;
       return;
     }
 
-    // Trigger Ground Impact: S / Down + Space while airborne after Weight restoration
+    // Trigger Ground Impact: S / Down + Space while airborne after Weight stabilization
     if (
       !onGround &&
       profile.canGroundImpact &&
       input.down &&
-      input.jumpJustPressed &&
+      (input.jumpJustPressed || this.jumpBufferMs > 0) &&
       !this.isGroundImpacting
     ) {
       this.isGroundImpacting = true;
@@ -274,8 +278,8 @@ export class Player {
       this.jumpBufferMs = 0;
       body.setVelocity(0, 0);
       this.animState = 'ground_impact';
-      this.updateCloakTrail();
-      this.render(time);
+      this.updateCloakTrail(time, body.velocity.x, body.velocity.y);
+      this.render(time, onGround);
       this.wasOnGround = onGround;
       return;
     }
@@ -301,14 +305,18 @@ export class Player {
     }
 
     // Variable jump height cut (ignore sub-frame press+release on initial jump tick)
-    if (!input.jumpJustPressed && input.jumpJustReleased && body.velocity.y < -130 && !this.inUpdraft) {
+    if (
+      !input.jumpJustPressed &&
+      input.jumpJustReleased &&
+      body.velocity.y < -130 &&
+      !this.inUpdraft
+    ) {
       body.setVelocityY(body.velocity.y * 0.56);
     }
 
-    // Floating & Updraft lift (Pre-Weight only)
+    // Floating & Updraft lift (Unanchored State only)
     let activelyFloating = false;
     if (profile.canFloat && this.inUpdraft && profile.canUseUpdraft && input.jumpHeld) {
-      // Rise smoothly inside updraft currents when holding Space (even from standing at the base)
       const startVy = onGround ? Math.min(body.velocity.y, -140) : body.velocity.y;
       const nextVy = Math.max(
         profile.updraftMaxRiseSpeed,
@@ -319,12 +327,10 @@ export class Player {
       activelyFloating = true;
     } else if (!onGround && profile.canFloat) {
       if (this.inUpdraft && profile.canUseUpdraft) {
-        // Gentle passive cushion in updraft even without holding Space
         const nextVy = Math.min(body.velocity.y, 38);
         body.setVelocityY(nextVy);
         activelyFloating = true;
       } else if (input.jumpHeld && body.velocity.y > 0) {
-        // Controlled slow-descent float in open air
         body.setMaxVelocity(profile.moveSpeed * 1.05, profile.floatMaxFallSpeed);
         if (body.velocity.y > profile.floatMaxFallSpeed) {
           body.setVelocityY(profile.floatMaxFallSpeed);
@@ -377,8 +383,8 @@ export class Player {
       this.animState = 'idle';
     }
 
-    this.updateCloakTrail();
-    this.render(time);
+    this.updateCloakTrail(time, body.velocity.x, body.velocity.y);
+    this.render(time, onGround);
     this.wasOnGround = onGround;
   }
 
@@ -418,261 +424,424 @@ export class Player {
     }
   }
 
-  private updateCloakTrail(): void {
-    const headX = this.sprite.x - this.facing * 5;
-    const headY = this.sprite.y - 8;
-    this.cloakTrail[0] = { x: headX, y: headY };
+  private updateCloakTrail(time: number, vx: number, vy: number): void {
+    const t = time * 0.001;
+    const isFloating = this.animState === 'float';
+    const shoulderX = this.sprite.x - this.facing * 4;
+    const shoulderY = this.sprite.y - 10;
+
+    if (
+      this.cloakTrail.length > 1 &&
+      Math.hypot(shoulderX - this.cloakTrail[1].x, shoulderY - this.cloakTrail[1].y) > 85
+    ) {
+      for (let i = 0; i < this.cloakTrail.length; i++) {
+        this.cloakTrail[i] = {
+          x: shoulderX - this.facing * i * 4.5,
+          y: shoulderY + i * 3.5,
+        };
+      }
+      return;
+    }
+
+    this.cloakTrail[0] = { x: shoulderX, y: shoulderY };
+
+    const windBillow = isFloating ? 9.5 : !this.hasWeight ? 6.2 : 4.8;
+    const verticalLift = isFloating
+      ? 2.2
+      : vy > 120
+        ? -2.8
+        : vy < -80
+          ? 6.0
+          : 4.4;
+
     for (let i = 1; i < this.cloakTrail.length; i++) {
       const prev = this.cloakTrail[i - 1];
       const cur = this.cloakTrail[i];
-      cur.x += (prev.x - this.facing * 5.5 - cur.x) * 0.38;
-      cur.y += (prev.y + 4.2 - cur.y) * 0.38;
+      const flutter = Math.sin(t * (isFloating ? 8.5 : 4.2) + i * 0.9) * (isFloating ? 2.6 : 1.2);
+      const targetX = prev.x - this.facing * windBillow - vx * 0.015 + flutter;
+      const targetY = prev.y + verticalLift;
+      cur.x += (targetX - cur.x) * 0.36;
+      cur.y += (targetY - cur.y) * 0.36;
     }
   }
 
-  private render(time: number): void {
+  private render(time: number, onGround: boolean): void {
     this.gfx.clear();
     const x = this.sprite.x;
     const y = this.sprite.y;
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     const vx = body.velocity.x;
+    const vy = body.velocity.y;
     const t = time * 0.001;
 
-    if (!this.hasWeight && this.animState !== 'restoring') {
-      this.renderUnboundForm(x, y, vx, t);
-    } else if (this.animState === 'restoring') {
-      this.renderRestoringMetamorphosis(x, y, t);
+    if (this.animState === 'restoring') {
+      this.renderStabilizationRite(x, y, t, onGround);
     } else {
-      this.renderGroundedForm(x, y, vx, t);
+      this.renderStabilizingGarment(x, y, vx, vy, t, onGround, this.hasWeight);
     }
   }
 
-  /**
-   * Form 1: Incomplete, translucent void silhouette with missing limb gaps,
-   * orbiting fragments, cyan rim-glow, and billowing float wisps.
-   */
-  private renderUnboundForm(x: number, y: number, vx: number, t: number): void {
-    const bob = Math.sin(t * 3.1) * 3.5;
-    const lean = Phaser.Math.Clamp(vx * 0.025, -6, 6);
-    const isFloating = this.animState === 'float';
-    const cy = y + bob;
+  private renderStabilizationRite(x: number, y: number, t: number, onGround: boolean): void {
+    const p = Phaser.Math.Clamp(this.restoringProgress, 0, 1);
+    const radius = 42 * (1 - p * 0.42);
 
-    // Soft ethereal outer glow
-    this.gfx.fillStyle(PALETTE.ETHEREAL_CYAN, isFloating ? 0.16 : 0.09);
-    this.gfx.fillCircle(x, cy - 4, isFloating ? 28 : 21);
+    // Kintsugi gold stabilization halo drawing threads tighter into the garment
+    this.gfx.fillStyle(PALETTE.GARMENT_GOLD_SEAM, 0.16 + p * 0.2);
+    this.gfx.fillCircle(x, y - 4, radius + Math.sin(t * 12) * 3.5);
+    this.gfx.lineStyle(1.6, PALETTE.GARMENT_GOLD_BRIGHT, 0.78);
+    this.gfx.strokeEllipse(x, y + 18, 52 * (1 - p * 0.3), 14);
 
-    // Spectral wing-ribbons when floating
-    if (isFloating) {
-      const wingSpread = 22 + Math.sin(t * 9) * 3.5;
-      this.gfx.lineStyle(2, PALETTE.ETHEREAL_CYAN, 0.65);
-      for (const side of [-1, 1]) {
-        this.gfx.beginPath();
-        this.gfx.moveTo(x + side * 6, cy - 8);
-        this.gfx.lineTo(x + side * wingSpread, cy - 16 + Math.sin(t * 7 + side) * 3);
-        this.gfx.lineTo(x + side * (wingSpread * 0.72), cy + 2);
-        this.gfx.strokePath();
-      }
+    for (let i = 0; i < 8; i++) {
+      const a = t * 4.6 + (i * Math.PI) / 4;
+      const dist = (1 - p) * 42 + 6;
+      const fx = x + Math.cos(a) * dist;
+      const fy = y - 4 + Math.sin(a) * dist * 0.72;
+      this.gfx.fillStyle(PALETTE.GARMENT_GOLD_BRIGHT, 0.92);
+      this.gfx.fillCircle(fx, fy, 2.8);
     }
 
-    // Trailing wisp ribbons instead of solid legs (incomplete lower form)
-    for (let i = 0; i < 3; i++) {
-      const offset = (i - 1) * 6;
-      const wave = Math.sin(t * 5.2 + i * 1.5) * 4.5 - vx * 0.02;
-      this.gfx.lineStyle(3.2 - i * 0.4, PALETTE.ETHEREAL_CYAN, 0.42);
+    this.renderStabilizingGarment(x, y - (1 - p) * 6, 0, 0, t, onGround, p >= 0.6);
+  }
+
+  /**
+   * Canonical side-view Stabilizing Garment renderer.
+   * Both Unanchored and Grounded states wear the same mysterious charcoal-and-gold
+   * garment with concealed face and zero human skin; Unanchored hovers weightlessly
+   * with billowing mantle hems, whereas Grounded plants firmly with heavy stride and
+   * intensified gold kintsugi seams.
+   */
+  private renderStabilizingGarment(
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    t: number,
+    onGround: boolean,
+    anchored: boolean
+  ): void {
+    const f = this.facing;
+    const isFloating = this.animState === 'float';
+    const isRunning = this.animState === 'run';
+    const isImpacting = this.animState === 'ground_impact';
+
+    // Subtle unmoored drift when Unanchored vs planted breathing when Grounded
+    const hoverOffset = anchored
+      ? 0
+      : onGround
+        ? -2.2 + Math.sin(t * 2.9) * 1.6
+        : Math.sin(t * 3.4) * 1.8;
+
+    const squashY = 1 - this.landingSquash * 0.3;
+    const stretchX = 1 + this.landingSquash * 0.18;
+    const lean = Phaser.Math.Clamp(vx * 0.022, -5.5, 5.5);
+    const breath = Math.sin(t * 2.5) * 0.9;
+    const cy = y + hoverOffset;
+
+    // 1. Ground-contact shadow (soft diffused shadow when Unanchored, crisp dark contact shadow when Grounded)
+    if (onGround) {
+      const shadowW = anchored ? 28 * stretchX : 22;
+      const shadowAlpha = anchored ? 0.46 : 0.22;
+      this.gfx.fillStyle(0x05070f, shadowAlpha);
+      this.gfx.fillEllipse(x, y + 25.5, shadowW, anchored ? 6.5 : 5);
+    }
+
+    // 2. Ground Impact golden-amber kinetic shroud
+    if (isImpacting) {
+      this.gfx.fillStyle(PALETTE.GARMENT_GOLD_SEAM, 0.24);
+      this.gfx.fillEllipse(x, cy - 4, 32, 60);
+      this.gfx.lineStyle(2.2, PALETTE.GARMENT_GOLD_BRIGHT, 0.88);
+      this.gfx.strokeEllipse(x, cy - 2, 24, 52);
+    }
+
+    // 3. Optional Imprint subtle halo behind cowl (never overrides the garment)
+    if (this.imprint === 'resonance') {
+      this.gfx.fillStyle(PALETTE.IMPRINT_RESONANCE, 0.14);
+      this.gfx.fillCircle(x, cy - 10, 23 + Math.sin(t * 2.8) * 1.8);
+    } else if (this.imprint === 'resolve') {
+      this.gfx.lineStyle(1.4, PALETTE.IMPRINT_RESOLVE, 0.48);
+      this.gfx.strokeCircle(x, cy - 18, 13.5 + Math.sin(t * 2.4));
+    }
+
+    // 4. Flowing Multi-Layered Mantle (Parchment-ash inner lining + Charcoal outer cloak + Gold kintsugi hem)
+    this.renderFlowingMantle(x, cy, f, t, isFloating, anchored);
+
+    // 5. Glider mantle spread wings when actively floating in Unanchored State
+    if (isFloating) {
+      const spread = 21 + Math.sin(t * 8.2) * 2.8;
+      // Parchment inner lining fan
+      this.gfx.fillStyle(PALETTE.GARMENT_LINING, 0.72);
       this.gfx.beginPath();
-      this.gfx.moveTo(x + offset * 0.6, cy + 5);
-      this.gfx.lineTo(x + offset + wave * 0.5, cy + 16);
-      this.gfx.lineTo(x + offset + wave, cy + 25);
+      this.gfx.moveTo(x - spread, cy - 6);
+      this.gfx.lineTo(x, cy - 13);
+      this.gfx.lineTo(x + spread * 0.82, cy - 5);
+      this.gfx.lineTo(x + spread * 0.48, cy + 9);
+      this.gfx.lineTo(x - spread * 0.65, cy + 10);
+      this.gfx.closePath();
+      this.gfx.fillPath();
+
+      // Charcoal outer mantle rib & gold seam
+      this.gfx.lineStyle(2.4, PALETTE.GARMENT_CHARCOAL, 0.95);
+      this.gfx.beginPath();
+      this.gfx.moveTo(x - spread, cy - 6);
+      this.gfx.lineTo(x, cy - 13);
+      this.gfx.lineTo(x + spread * 0.82, cy - 5);
+      this.gfx.strokePath();
+
+      this.gfx.lineStyle(1.2, PALETTE.GARMENT_GOLD_SEAM, 0.85);
+      this.gfx.beginPath();
+      this.gfx.moveTo(x - spread * 0.9, cy - 4);
+      this.gfx.lineTo(x, cy - 11);
+      this.gfx.lineTo(x + spread * 0.74, cy - 3);
       this.gfx.strokePath();
     }
 
-    // Orbiting unfinished soul-shards around gaps in torso
-    for (let i = 0; i < 4; i++) {
-      const angle = t * 2.2 + (i * Math.PI) / 2;
-      const sx = x + Math.cos(angle) * (13 + (isFloating ? 4 : 0));
-      const sy = cy + 2 + Math.sin(angle * 1.3) * 11;
-      this.gfx.fillStyle(0x0c1022, 0.9);
-      this.gfx.fillCircle(sx, sy, 2.8);
-      this.gfx.lineStyle(1.2, PALETTE.ETHEREAL_CYAN, 0.8);
-      this.gfx.strokeCircle(sx, sy, 2.8);
-    }
+    // 6. Cloth-wrapped Greaves & Boots (no bare skin; garment shapes the stride)
+    const cycle = this.walkCycle * 6.5;
+    const strideFront = isRunning
+      ? Math.sin(cycle) * (anchored ? 8.2 : 6.4)
+      : !onGround
+        ? f * 2.5
+        : 0;
+    const strideBack = isRunning
+      ? -strideFront
+      : !onGround
+        ? -f * 2.2
+        : 0;
+    const liftFront = isRunning ? Math.max(0, -Math.cos(cycle) * 4.2) : !onGround ? 3.2 : 0;
+    const liftBack = isRunning ? Math.max(0, Math.cos(cycle) * 4.2) : !onGround ? 1.5 : 0;
 
-    // Fragmented upper torso (with visible hollow core gap)
-    this.gfx.fillStyle(0x0b0f1f, 0.84);
-    this.gfx.lineStyle(1.6, PALETTE.ETHEREAL_CYAN, 0.78);
+    const hipY = cy + 5 * squashY;
+    const footBaseY = anchored ? y + 24.8 : cy + 23.5;
+
+    // Back wrapped leg
+    const backFootX = x - f * 2.5 + strideBack;
+    const backFootY = footBaseY - liftBack;
+    this.gfx.lineStyle(4.6, 0x121217, 0.98);
     this.gfx.beginPath();
-    this.gfx.moveTo(x - 9 + lean * 0.4, cy - 10);
-    this.gfx.lineTo(x + 9 + lean * 0.4, cy - 10);
-    this.gfx.lineTo(x + 6 + lean * 0.2, cy + 5);
-    this.gfx.lineTo(x - 6 + lean * 0.2, cy + 5);
+    this.gfx.moveTo(x - f * 2, hipY);
+    this.gfx.lineTo(backFootX, backFootY);
+    this.gfx.strokePath();
+
+    // Front wrapped leg + antique gold kintsugi shin-binding
+    const frontFootX = x + f * 2.5 + strideFront;
+    const frontFootY = footBaseY - liftFront;
+    this.gfx.lineStyle(5, PALETTE.GARMENT_CHARCOAL, 1);
+    this.gfx.beginPath();
+    this.gfx.moveTo(x + f * 2, hipY);
+    this.gfx.lineTo(frontFootX, frontFootY);
+    this.gfx.strokePath();
+
+    // Tapered dark-ash cloth boot cuff
+    this.gfx.fillStyle(PALETTE.GARMENT_DARK_ASH, 1);
+    this.gfx.fillRoundedRect(frontFootX - 3, frontFootY - 4, 7.5 * (f === 1 ? 1 : 0.9), 4.5, 1.5);
+
+    this.gfx.lineStyle(1.2, PALETTE.GARMENT_GOLD_SEAM, anchored ? 0.9 : 0.62);
+    this.gfx.beginPath();
+    this.gfx.moveTo(x + f * 2 + strideFront * 0.45, (hipY + frontFootY) * 0.52);
+    this.gfx.lineTo(frontFootX, frontFootY - 2);
+    this.gfx.strokePath();
+
+    // 7. Split Longcoat Skirt / Lower Robe Panels with Parchment Underlayer & Gold Seams
+    const tailSway = Phaser.Math.Clamp(-vx * 0.025, -7, 7) + Math.sin(t * 3.8) * (anchored ? 1.1 : 2.4);
+    const tailLift = Phaser.Math.Clamp(-vy * 0.015, -5, 4);
+    const hemY = hipY + 14.5 + tailLift * 0.4;
+
+    // Inner parchment-ash robe panel peek
+    this.gfx.fillStyle(PALETTE.GARMENT_LINING, 0.85);
+    this.gfx.beginPath();
+    this.gfx.moveTo(x - 5, hipY);
+    this.gfx.lineTo(x + 5, hipY);
+    this.gfx.lineTo(x + 6 + tailSway * 0.6, hemY - 2);
+    this.gfx.lineTo(x - 6 + tailSway * 0.6, hemY - 2);
+    this.gfx.closePath();
+    this.gfx.fillPath();
+
+    // Outer charcoal split coat-tails (back panel & front angled panel)
+    this.gfx.fillStyle(PALETTE.GARMENT_CHARCOAL, 0.98);
+    this.gfx.beginPath();
+    this.gfx.moveTo(x - 7.5 * stretchX, hipY - 1);
+    this.gfx.lineTo(x + 7.5 * stretchX, hipY - 1);
+    this.gfx.lineTo(x + 9.5 + tailSway, hemY);
+    this.gfx.lineTo(x + f * 1.5 + tailSway * 0.5, hemY - 4.5);
+    this.gfx.lineTo(x - 9.5 + tailSway, hemY + 1);
+    this.gfx.closePath();
+    this.gfx.fillPath();
+
+    // Gold kintsugi fracture seam tracing down the front coat-tail
+    const seamAlpha = anchored ? 0.92 : 0.68 + Math.sin(t * 4.2) * 0.16;
+    this.gfx.lineStyle(1.3, PALETTE.GARMENT_GOLD_SEAM, seamAlpha);
+    this.gfx.beginPath();
+    this.gfx.moveTo(x + f * 3.5, hipY + 1);
+    this.gfx.lineTo(x + f * 5.2 + tailSway * 0.5, hipY + 7);
+    this.gfx.lineTo(x + f * 4.2 + tailSway * 0.8, hemY - 1.5);
+    this.gfx.strokePath();
+
+    // 8. Layered Charcoal & Dark-Ash Upper Robe Torso
+    const torsoTop = cy - (13.5 - breath * 0.35) * squashY;
+    const shoulderW = 9.8 * stretchX;
+
+    this.gfx.fillStyle(PALETTE.GARMENT_DARK_ASH, 1);
+    this.gfx.lineStyle(1.2, PALETTE.GARMENT_MID_ASH, 0.8);
+    this.gfx.beginPath();
+    this.gfx.moveTo(x - shoulderW + lean * 0.4, torsoTop);
+    this.gfx.lineTo(x + shoulderW + lean * 0.4, torsoTop);
+    this.gfx.lineTo(x + shoulderW * 0.76, hipY + 1);
+    this.gfx.lineTo(x - shoulderW * 0.76, hipY + 1);
     this.gfx.closePath();
     this.gfx.fillPath();
     this.gfx.strokePath();
 
-    // Missing chest void fracture
-    this.gfx.fillStyle(PALETTE.ETHEREAL_CYAN, 0.35 + Math.sin(t * 4.5) * 0.15);
-    this.gfx.fillCircle(x + lean * 0.3, cy - 3, 3.2);
-
-    // Floating head silhouette (detached slightly from shoulders to emphasize unfinished form)
-    const hx = x + lean * 0.55;
-    const hy = cy - 20;
-    this.gfx.fillStyle(0x0b0f1f, 0.9);
-    this.gfx.fillCircle(hx, hy, 7.8);
-    this.gfx.lineStyle(1.5, PALETTE.ETHEREAL_CYAN, 0.85);
-    this.gfx.strokeCircle(hx, hy, 7.8);
-
-    // Expressive glowing eyes (with periodic blink)
-    const blink = Math.sin(t * 0.85) > 0.985 ? 0.2 : 1;
-    const eyeX = hx + this.facing * 2.6;
-    this.gfx.fillStyle(PALETTE.ETHEREAL_SOFT, 0.95);
-    this.gfx.fillEllipse(eyeX - 1.8, hy - 0.5, 2.4, 2.8 * blink);
-    this.gfx.fillEllipse(eyeX + 2.2, hy - 0.5, 2.4, 2.8 * blink);
-  }
-
-  /**
-   * Cinematic transition between Unbound Silhouette and Grounded Vessel.
-   */
-  private renderRestoringMetamorphosis(x: number, y: number, t: number): void {
-    const p = Phaser.Math.Clamp(this.restoringProgress, 0, 1);
-    const radius = 38 * (1 - p * 0.45);
-    this.gfx.fillStyle(PALETTE.REMNANT_GOLD, 0.18 + p * 0.22);
-    this.gfx.fillCircle(x, y - 4, radius + Math.sin(t * 14) * 4);
-
-    // Spiraling golden fragments converging into the body
-    for (let i = 0; i < 8; i++) {
-      const a = t * 5 + (i * Math.PI) / 4;
-      const dist = (1 - p) * 44 + 4;
-      const fx = x + Math.cos(a) * dist;
-      const fy = y - 4 + Math.sin(a) * dist * 0.75;
-      this.gfx.fillStyle(PALETTE.REMNANT_BRIGHT, 0.9);
-      this.gfx.fillCircle(fx, fy, 3.2);
-    }
-
-    if (p < 0.65) {
-      this.renderUnboundForm(x, y - p * 8, 0, t);
-    } else {
-      this.renderGroundedForm(x, y, 0, t);
-    }
-  }
-
-  /**
-   * Form 2: Solid, grounded obsidian-slate vessel bound by warm kintsugi-gold seams,
-   * articulated striding legs, traveler's mantle, and glowing core sigil.
-   */
-  private renderGroundedForm(x: number, y: number, vx: number, t: number): void {
-    const squashY = 1 - this.landingSquash * 0.35;
-    const stretchX = 1 + this.landingSquash * 0.22;
-    const lean = Phaser.Math.Clamp(vx * 0.02, -5, 5);
-    const breath = Math.sin(t * 2.6) * 1.1;
-
-    // Ground Impact comet shroud
-    if (this.animState === 'ground_impact') {
-      this.gfx.fillStyle(PALETTE.REMNANT_GOLD, 0.28);
-      this.gfx.fillEllipse(x, y - 6, 30, 58);
-      this.gfx.lineStyle(2.5, PALETTE.REMNANT_BRIGHT, 0.9);
-      this.gfx.strokeEllipse(x, y - 2, 24, 50);
-    }
-
-    // Optional Imprint aura halo behind shoulders
-    if (this.imprint === 'resonance') {
-      this.gfx.fillStyle(PALETTE.IMPRINT_RESONANCE, 0.16);
-      this.gfx.fillCircle(x, y - 8, 24 + Math.sin(t * 3) * 2);
-    } else if (this.imprint === 'resolve') {
-      this.gfx.lineStyle(1.6, PALETTE.IMPRINT_RESOLVE, 0.55);
-      this.gfx.strokeCircle(x, y - 18, 14 + Math.sin(t * 2.5));
-    }
-
-    // Flowing traveler's cloak / scarf ribbon
-    this.gfx.lineStyle(7, 0x262d4a, 0.95);
+    // Cross-wrapped charcoal lapel & diagonal kintsugi gold chest seam
+    this.gfx.fillStyle(PALETTE.GARMENT_CHARCOAL, 1);
     this.gfx.beginPath();
-    this.gfx.moveTo(x - this.facing * 3, y - 11);
+    this.gfx.moveTo(x - shoulderW * 0.85 + lean * 0.4, torsoTop + 1);
+    this.gfx.lineTo(x + f * 4 + lean * 0.3, torsoTop + 1);
+    this.gfx.lineTo(x - f * 3, hipY);
+    this.gfx.lineTo(x - shoulderW * 0.75, hipY);
+    this.gfx.closePath();
+    this.gfx.fillPath();
+
+    this.gfx.lineStyle(1.45, PALETTE.GARMENT_GOLD_BRIGHT, seamAlpha);
+    this.gfx.beginPath();
+    this.gfx.moveTo(x - f * 5 + lean * 0.35, torsoTop + 2.5);
+    this.gfx.lineTo(x + f * 1.2 + lean * 0.3, cy - 3.5);
+    this.gfx.lineTo(x + f * 5.8 + lean * 0.25, torsoTop + 5.5);
+    this.gfx.strokePath();
+
+    // 9. Antique Gold Waist-Ring Clasp & Sash (signature detail from playable-garment-reference.png)
+    this.gfx.fillStyle(0x141318, 1);
+    this.gfx.fillRect(x - shoulderW * 0.78, hipY - 2.6, shoulderW * 1.56, 4.2);
+
+    const ringX = x + f * 2.4 + lean * 0.2;
+    const ringY = hipY - 0.5;
+    this.gfx.lineStyle(1.8, PALETTE.GARMENT_GOLD_BRIGHT, 0.96);
+    this.gfx.strokeCircle(ringX, ringY, 3.1);
+
+    // Hanging gold-tipped sash ribbon from waist-ring
+    this.gfx.lineStyle(1.5, PALETTE.GARMENT_GOLD_SEAM, 0.85);
+    this.gfx.beginPath();
+    this.gfx.moveTo(ringX, ringY + 3);
+    this.gfx.lineTo(ringX + tailSway * 0.45, ringY + 10.5);
+    this.gfx.strokePath();
+
+    // 10. Draped Foreground Cloth Sleeve (reacts to run, float, and interact)
+    const interactReach = this.animState === 'interact' ? 7.5 : 0;
+    const armSwing = isRunning ? -Math.sin(cycle) * 5.2 : isFloating ? 4.5 : 0;
+    const sleeveEndX = x + f * (4.5 + interactReach) + armSwing + lean * 0.3;
+    const sleeveEndY =
+      this.animState === 'interact'
+        ? cy - 4
+        : isFloating
+          ? cy - 5
+          : cy + 3.5;
+
+    this.gfx.fillStyle(PALETTE.GARMENT_CHARCOAL, 0.98);
+    this.gfx.beginPath();
+    this.gfx.moveTo(x + lean * 0.35, torsoTop + 2);
+    this.gfx.lineTo(sleeveEndX + f * 2.5, sleeveEndY - 2);
+    this.gfx.lineTo(sleeveEndX - f * 2.2, sleeveEndY + 4.5);
+    this.gfx.lineTo(x - f * 3 + lean * 0.3, torsoTop + 7);
+    this.gfx.closePath();
+    this.gfx.fillPath();
+
+    this.gfx.lineStyle(1.25, PALETTE.GARMENT_GOLD_SEAM, seamAlpha);
+    this.gfx.beginPath();
+    this.gfx.moveTo(x + lean * 0.35, torsoTop + 3.2);
+    this.gfx.lineTo(sleeveEndX, sleeveEndY + 1);
+    this.gfx.strokePath();
+
+    if (this.animState === 'interact') {
+      this.gfx.fillStyle(PALETTE.GARMENT_GOLD_BRIGHT, 0.45);
+      this.gfx.fillCircle(sleeveEndX + f * 3, sleeveEndY, 5.5);
+    }
+
+    // 11. High Draped Shoulder Cowl, Concealed Void Face & Swept Silver-Ash Garment Crest
+    // Zero visible skin, eyes, or human facial features.
+    const hx = x + lean * 0.52;
+    const hy = torsoTop - 7.5;
+
+    // Concealed shadow-void head interior
+    this.gfx.fillStyle(0x09090e, 1);
+    this.gfx.fillCircle(hx, hy, 7.6);
+
+    // Swept sculptural silver-ash crest folds (signature upper-head silhouette of reference)
+    this.gfx.fillStyle(0x9ea4b3, 0.94);
+    this.gfx.beginPath();
+    this.gfx.moveTo(hx - f * 7.8, hy + 1.5);
+    this.gfx.lineTo(hx - f * 9.5 + tailSway * 0.22, hy - 5.5);
+    this.gfx.lineTo(hx - f * 2.5, hy - 10.2);
+    this.gfx.lineTo(hx + f * 6.8, hy - 7.4);
+    this.gfx.lineTo(hx + f * 8.2, hy - 2.6);
+    this.gfx.lineTo(hx + f * 2.5, hy - 3.8);
+    this.gfx.lineTo(hx - f * 3.5, hy - 1.2);
+    this.gfx.closePath();
+    this.gfx.fillPath();
+
+    // Brighter silver-ash top highlight strands
+    this.gfx.lineStyle(1.3, PALETTE.GARMENT_SILVER_CREST, 0.88);
+    this.gfx.beginPath();
+    this.gfx.moveTo(hx - f * 8.4 + tailSway * 0.2, hy - 5.2);
+    this.gfx.lineTo(hx - f * 1.8, hy - 9.8);
+    this.gfx.lineTo(hx + f * 6.5, hy - 7.1);
+    this.gfx.strokePath();
+
+    // High dark-ash collar cowl wrapping the lower face completely in shadow
+    this.gfx.fillStyle(PALETTE.GARMENT_CHARCOAL, 1);
+    this.gfx.beginPath();
+    this.gfx.moveTo(hx - 8.8, torsoTop + 2.5);
+    this.gfx.lineTo(hx - 7.4, hy - 1.2);
+    this.gfx.lineTo(hx + f * 7.6, hy - 0.4);
+    this.gfx.lineTo(hx + 8.8, torsoTop + 2.5);
+    this.gfx.closePath();
+    this.gfx.fillPath();
+
+    // Delicate gold kintsugi collar rim
+    this.gfx.lineStyle(1.3, PALETTE.GARMENT_GOLD_SEAM, 0.88);
+    this.gfx.beginPath();
+    this.gfx.moveTo(hx - 7.2, hy - 0.8);
+    this.gfx.lineTo(hx + f * 1.5, hy + 1.4);
+    this.gfx.lineTo(hx + 7.2, hy - 0.3);
+    this.gfx.strokePath();
+  }
+
+  private renderFlowingMantle(
+    x: number,
+    cy: number,
+    f: 1 | -1,
+    t: number,
+    isFloating: boolean,
+    anchored: boolean
+  ): void {
+    if (this.cloakTrail.length < 3) return;
+
+    const baseWidth = isFloating ? 11.5 : anchored ? 8.8 : 9.6;
+
+    // Parchment-ash inner mantle lining (slightly offset beneath outer charcoal fabric)
+    this.gfx.lineStyle(baseWidth, PALETTE.GARMENT_LINING, 0.82);
+    this.gfx.beginPath();
+    this.gfx.moveTo(x - f * 3, cy - 11);
+    for (let i = 1; i < this.cloakTrail.length; i++) {
+      this.gfx.lineTo(this.cloakTrail[i].x + f * 1.5, this.cloakTrail[i].y + 2.2);
+    }
+    this.gfx.strokePath();
+
+    // Outer charcoal-ash mantle layer
+    this.gfx.lineStyle(baseWidth - 1.6, PALETTE.GARMENT_CHARCOAL, 0.96);
+    this.gfx.beginPath();
+    this.gfx.moveTo(x - f * 3, cy - 12);
     for (let i = 1; i < this.cloakTrail.length; i++) {
       this.gfx.lineTo(this.cloakTrail[i].x, this.cloakTrail[i].y);
     }
     this.gfx.strokePath();
 
-    this.gfx.lineStyle(1.6, PALETTE.REMNANT_GOLD, 0.72);
+    // Delicate kintsugi gold thread running along mantle border
+    const goldAlpha = anchored ? 0.82 : 0.58 + Math.sin(t * 3.6) * 0.16;
+    this.gfx.lineStyle(1.4, PALETTE.GARMENT_GOLD_SEAM, goldAlpha);
     this.gfx.beginPath();
-    this.gfx.moveTo(x - this.facing * 3, y - 11);
+    this.gfx.moveTo(x - f * 3, cy - 11.2);
     for (let i = 1; i < this.cloakTrail.length; i++) {
-      this.gfx.lineTo(this.cloakTrail[i].x, this.cloakTrail[i].y + 2);
+      this.gfx.lineTo(this.cloakTrail[i].x, this.cloakTrail[i].y + 1.6);
     }
     this.gfx.strokePath();
-
-    // Articulated solid legs & grounded boots
-    const isRunning = this.animState === 'run';
-    const strideA = isRunning ? Math.sin(this.walkCycle * 6.5) * 8 : 0;
-    const strideB = isRunning ? -strideA : 0;
-    const kneeLiftA = isRunning ? Math.max(0, -Math.cos(this.walkCycle * 6.5) * 4) : 0;
-    const kneeLiftB = isRunning ? Math.max(0, Math.cos(this.walkCycle * 6.5) * 4) : 0;
-
-    const footY = y + 25;
-    const hipY = y + 6 * squashY;
-
-    // Back leg
-    this.gfx.lineStyle(4.5, 0x101425, 1);
-    this.gfx.beginPath();
-    this.gfx.moveTo(x - 3, hipY);
-    this.gfx.lineTo(x - 3 + strideB, footY - kneeLiftB);
-    this.gfx.strokePath();
-
-    // Front leg with golden greave seam
-    this.gfx.lineStyle(4.8, 0x181f36, 1);
-    this.gfx.beginPath();
-    this.gfx.moveTo(x + 3, hipY);
-    this.gfx.lineTo(x + 3 + strideA, footY - kneeLiftA);
-    this.gfx.strokePath();
-
-    this.gfx.lineStyle(1.3, PALETTE.REMNANT_GOLD, 0.85);
-    this.gfx.beginPath();
-    this.gfx.moveTo(x + 3 + strideA * 0.5, (hipY + footY) * 0.5);
-    this.gfx.lineTo(x + 3 + strideA, footY - kneeLiftA);
-    this.gfx.strokePath();
-
-    // Solid armored/mantled torso
-    const torsoTop = y - (13 - breath * 0.4) * squashY;
-    const torsoW = 10.5 * stretchX;
-    this.gfx.fillStyle(0x141a2e, 1);
-    this.gfx.lineStyle(1.6, PALETTE.REMNANT_BRONZE, 0.9);
-    this.gfx.beginPath();
-    this.gfx.moveTo(x - torsoW + lean * 0.4, torsoTop);
-    this.gfx.lineTo(x + torsoW + lean * 0.4, torsoTop);
-    this.gfx.lineTo(x + torsoW * 0.78, hipY + 2);
-    this.gfx.lineTo(x - torsoW * 0.78, hipY + 2);
-    this.gfx.closePath();
-    this.gfx.fillPath();
-    this.gfx.strokePath();
-
-    // Kintsugi golden seams & restored Weight core sigil on chest
-    this.gfx.lineStyle(1.5, PALETTE.REMNANT_BRIGHT, 0.92);
-    this.gfx.beginPath();
-    this.gfx.moveTo(x - 6 + lean * 0.3, torsoTop + 3);
-    this.gfx.lineTo(x + lean * 0.3, y - 3);
-    this.gfx.lineTo(x + 6 + lean * 0.3, torsoTop + 5);
-    this.gfx.strokePath();
-
-    const coreColor =
-      this.imprint === 'resonance'
-        ? PALETTE.IMPRINT_RESONANCE
-        : this.imprint === 'resolve'
-          ? PALETTE.IMPRINT_RESOLVE
-          : PALETTE.REMNANT_BRIGHT;
-    this.gfx.fillStyle(coreColor, 0.95);
-    this.gfx.fillCircle(x + lean * 0.3, y - 3, 3.2);
-
-    // Solid head connected by collar
-    const hx = x + lean * 0.55;
-    const hy = torsoTop - 8.5;
-    this.gfx.fillStyle(0x141a2e, 1);
-    this.gfx.fillCircle(hx, hy, 8.2);
-    this.gfx.lineStyle(1.6, PALETTE.REMNANT_GOLD, 0.88);
-    this.gfx.strokeCircle(hx, hy, 8.2);
-
-    // Warm golden-white eyes
-    const blink = Math.sin(t * 0.9) > 0.985 ? 0.2 : 1;
-    const eyeX = hx + this.facing * 2.8;
-    this.gfx.fillStyle(PALETTE.REMNANT_BRIGHT, 1);
-    this.gfx.fillEllipse(eyeX - 1.8, hy - 0.5, 2.5, 2.8 * blink);
-    this.gfx.fillEllipse(eyeX + 2.2, hy - 0.5, 2.5, 2.8 * blink);
   }
 }

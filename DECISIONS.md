@@ -1,56 +1,62 @@
-# ARCHITECTURE & DESIGN DECISIONS — A FORM UNWRITTEN
+# ARCHITECTURE & DESIGN DECISIONS: A FORM UNWRITTEN
 
-This document records key engineering, gameplay, visual, and audio decisions made during the vertical slice implementation so any developer or AI assistant switching onto the project has full context.
-
----
-
-## 1. Architecture Decisions
-
-### 1.1 Modular Separation Without Over-Engineering
-- **Entities (`src/game/entities/`)** encapsulate physics bodies and visual rendering (`Player`, `NPC`, `Interactable`, `WindUpdraft`, `HeavyBlock`, `PressurePlate`, `FracturedSlab`, `RunicGate`).
-- **Systems (`src/game/systems/`)** are pure or event-driven TypeScript classes (`QuestManager`, `DialogueManager`, `RemnantManager`, `ImprintManager`, `SaveManager`, `AudioManager`) decoupled from Phaser rendering so they can be unit-tested directly in Vitest (`src/game/__tests__/systems.test.ts`).
-- **Declarative Data (`src/game/data/`)** stores quest definitions (`quests.ts`), branching dialogue trees (`dialogues.ts`), and level geometry (`world.ts`) separately from scene orchestration (`GameScene.ts`).
-
-### 1.2 Scene Restart Safety
-- Phaser's per-scene `this.events` emitter persists across `scene.restart()`. `GameScene.create()` explicitly registers a `Phaser.Scenes.Events.SHUTDOWN` cleanup handler to clear custom `GAME_EVENTS` listeners, preventing duplicate HUD notifications or stale references across restarts.
-
-### 1.3 Schema-Validated LocalStorage Persistence
-- `SaveManager.ts` validates every field (`version === 1`, finite player coordinates, valid `imprint` union, non-null objects/arrays) on both `save()` and `load()`. If corrupted JSON or an incompatible schema is encountered, `SaveManager.load()` purges the bad entry and returns `null` rather than throwing a runtime exception.
+This document records significant technical, gameplay, narrative, and visual engineering decisions so any developer or AI model working on future chapters has complete architectural clarity.
 
 ---
 
-## 2. Gameplay Design Decisions
+## 1. Core Architecture & Rendering Decisions
 
-### 2.1 Making Weight Restoration a True Transformation (Not a Stat Upgrade)
-- **Pre-Weight (`PHYSICS_PROFILES.UNBOUND`):** `gravityY: 620`, `floatMaxFallSpeed: 58`, and `updraftMaxRiseSpeed: -275`. Allows effortless traversal of high vertical wind spires and wide chasms in Zones 1–2, while `HeavyBlock` (`pushable = false, immovable = true`), `PressurePlate` (diegetic *"you carry no weight"* feedback), and `FracturedSlab` ignore the player.
-- **Post-Weight (`PHYSICS_PROFILES.GROUNDED`):** `gravityY: 1180`, floating and wind-updraft lift disabled, **Ground Impact** (`S / Down + Space` in midair) enabled, `HeavyBlock` pushing enabled, and `PressurePlate` activation enabled.
-- **Re-Contextualizing Existing Space (Chapter 4):** Rather than funneling forward through a linear hallway, restoring Weight drops the player through the fractured Crucible floor into a Return Gallery leading back to Zone 1's opening courtyard. There, the very Updraft Chasm used in minute 1 can no longer lift the player, while the previously unresponsive Courtyard Monolith & Dual Pressure Plinths now unseal the subterranean **Sunken Sanctum**.
+### 1.1 Dual-Camera Full HD (`1920 x 1080`) Pipeline
+* **Problem:** Upgrading the canvas from `1280 x 720` to `1920 x 1080` (`1.5x` pixel dimensions) without adjusting camera zoom would shrink the protagonist on screen and expose overly wide puzzle rooms, while zooming a single camera would blur HUD/Journal text.
+* **Solution (`src/game/scenes/GameScene.ts`):**
+  * `cameras.main` runs at `WORLD_CAMERA_ZOOM = 1.42`, preserving intimate character framing and exact Arcade Physics jump kinematics across the expanded `5500 x 1420` world.
+  * Fixed `scrollFactor(0)` sky and `1920px`-wide parallax textures apply `.setScale(1 / WORLD_CAMERA_ZOOM)` so background artwork renders at crisp `1:1` native Full HD pixels without cropping or upscaling blur.
+  * A dedicated `UICamera` (`zoom = 1.0`, `scroll = 0, 0`) renders `HUD`, `DialogueBox`, `WorldMap`, `Journal`, `PauseMenu`, `RestorationOverlay`, and `vignetteImage` at razor-sharp native `1920 x 1080` resolution, with strict `cameras.main.ignore(uiRoots)` and `syncUiCameraIgnores()` isolation.
 
-### 2.2 Anti-Softlock Level Engineering
-- Every jump gap and step height in `src/game/data/world.ts` was tuned against exact kinematics (Unbound jump apex `~139px` + float glide vs. Grounded jump apex `~117px`, horizontal span `~209px`; vertical stair steps kept to `58–75px`).
-- Pushable `HeavyBlock` entities are constrained to safe `[minX, maxX]` horizontal stone tracks so they cannot fall off cliffs or wedge irreversibly against walls, supplemented by nearby **Reset Runic Monolith** pedestals (`Interactable` kind `'reset_rune'`).
-- Courtyard and Sanctum dual-seal gates **permanently latch open** once all required seals are simultaneously satisfied, preventing players from locking themselves out when stepping off a plate to walk through the gate.
+### 1.2 Native Accessible `<dialog>` for Player Naming
+* **Decision (`index.html`, `src/style.css`, `src/game/ui/NamePrompt.ts`):** Used a native `<dialog id="name-dialog">` with `<form method="dialog">` rather than reinventing canvas text-input caret/IME handling inside WebGL.
+* **Key Safeguards:**
+  * Placed `<button type="submit" value="confirm">` first in DOM order so pressing `Enter` inside `<input id="player-name-input">` natively submits `confirm`.
+  * Guarded IME composition (`event.isComposing`), temporarily suspended Phaser's keyboard manager while typing so `Space`/`W`/`A`/`S`/`D` never fire menu actions behind the modal, and reset `dialog.returnValue = ''` immediately on close so `Escape` dismissals never leak stale confirm states.
 
-### 2.3 Non-Binary Philosophical Choice (Chapter 5)
-- In **The Cradle of First Names**, **Vespera, the Bound Warden** presents a genuine dilemma without a "good vs. evil" framing:
-  - **Lend Your Weight (*Imprint of Resonance* — Becoming):** Preserves a fragile mortal hearth-memory in the present at the cost of clarity about your past.
-  - **Reclaim the Echo Core (*Imprint of Resolve* — Original Self):** With Vespera's peaceful consent, releases her centuries-long vigil into rest so you can awaken a vision of your origin.
-- The ending hook at the **Fractured Mirror-Arch** reveals chains broken *from the inside*—challenging the protagonist's initial assumption that his form was stolen by an enemy.
+### 1.3 Schema-Validated `SaveState` v2 & Seamless v1 Migration
+* **Decision (`src/game/systems/SaveManager.ts`):** Upgraded saves to `version: 2` while writing a deterministic `migrateV1ToV2()` converter.
+* **Coordinate & Rank Remapping:** Because inserting the **Shattered Sky-Arch** (`x: 3320..4120`) shifted the **Crucible of Mass** and **Cradle of First Names** eastward, `SaveManager` differentiates **post-Weight** vs. **pre-Weight** legacy `v1` saves:
+  * **Post-Weight `v1` saves** migrate with `adventurerRank: 'F'`, shift eastern Crucible coordinates `+1040px` (`3440 -> 4480`) and lower Sanctum coordinates `+760px`, and reconcile `sky_bell_rung` + `crucible_lock_*` + `crucible_unsealed` flags.
+  * **Pre-Weight `v1` saves** migrate with `adventurerRank: 'G'` and are **never** shifted inside the newly sealed Crucible (`x >= 4120`); eastern upper-level pre-Weight saves land safely on the Sky-Arch threshold (`x = 3268, y = 514` if both Wind-Spire conduits were attuned, or `x = 3168, y = 514` west of the Outer Spire Gate if not).
+  * Incomplete saves with recoverable progress fields fall back safely without calling `localStorage.removeItem(...)` on valid JSON objects.
+
+### 1.4 DOM-Free Pure Systems for Fast Vitest Verification
+* **Decision (`src/game/systems/`):** Core systems (`ExplorationManager`, `QuestManager`, `DialogueManager`, `RemnantManager`, `ImprintManager`, `SaveManager`) avoid runtime DOM/Canvas globals (`import type Phaser from 'phaser'` and `Math.hypot`), allowing `npm test` to execute all unit, migration, cartography, and source-wide punctuation audits in `< 400ms` in Node.
 
 ---
 
-## 3. Visual, Asset & Audio Direction Decisions
+## 2. Character Canon & Gameplay Redesign Decisions
 
-### 3.1 Cohesive Procedural Art & Final Asset Replacement Strategy
-- Per project guidelines (*"Visual consistency is more important than asset quantity. Do not use random unrelated stock sprites"*), all environment textures, particles, parallax layers, ruins, and character animations are rendered procedurally via `ArtGenerator.ts` (offscreen HTML5 Canvas gradients/silhouettes) and dynamic `Phaser.GameObjects.Graphics` vector + particle rigs.
-- **Protagonist Readability:** Decoupling the `24x52` Arcade Physics hitbox from `Player.render()` ensures rock-solid collision stability across transformation while making the visual shift—from a translucent cyan-rimmed silhouette with floating limb-gaps to a solid obsidian-and-kintsugi-gold mantled figure with striding legs—immediately recognizable at any viewport size.
-- **Where Final Production Assets Should Be Placed:**
-  - `src/assets/sprites/` — Protagonist sprite sheets (`unbound.png/.json`, `grounded.png/.json`) and NPC animations (`oren`, `vespera`).
-  - `src/assets/images/` — Hand-painted parallax layers (`sky`, `far`, `mid`, `near`) and tileable ruin tilesets.
-  - `src/assets/audio/` — Recorded ambient wind loops, chamber strings/cello stems, and Foley SFX.
-  - `src/assets/fonts/` — Licensed display serif typeface (currently styled with universal Georgia/Palatino serif stack for zero missing-font network errors).
+### 2.1 Enforcing the Stabilizing Garment Canon (`src/game/entities/Player.ts`)
+* **Canon Rule:** The protagonist has no biological body; his visible manifestation is the **charcoal-and-gold Stabilizing Garment**, and the cyan/multicolored astral essence must never be rendered as the playable character model.
+* **Implementation:** Replaced the earlier translucent cyan humanoid outline with a consistent side-view **Stabilizing Garment** renderer across both **Unanchored State** and **Grounded State**:
+  * Layered charcoal/dark-ash tunic and split robes, warm parchment-ash inner mantle lining, antique gold waist-ring clasp, cloth-wrapped boots, swept silver-ash cowl folds around a completely dark void visage, and kintsugi-gold seams.
+  * Multi-segment trailing mantle physics spreads into a wide glider silhouette during airborne float (`Unanchored State`) and settles into a weighted, earthbound drape after reclaiming Weight (`Grounded State`), with instant node-snap protection if the player respawns or teleports `> 85px`.
 
-### 3.2 Procedural Web Audio Soundscape (`AudioManager.ts`)
-- Built directly atop the browser's `AudioContext` (filtered brown/pink noise wind bed + LFO sweep, generative Aeolian harmonic pads that drop an octave and warm from sine to triangle timbres after restoring Weight, plus synthesized Foley/chimes).
-- Eliminates missing audio file errors, respects browser autoplay policies by unlocking on first input, persists mute preference (`[M]`), and remains 100% playable when muted or headless.
+### 2.2 Multi-Stage Remnant Journey & Crucible Containment (`Echoes of Substance`)
+* **Problem:** Allowing the player to claim the Remnant of Weight immediately upon opening the Wind-Spire gate undercut the sense of earning a 3,000-year stabilization rite.
+* **Solution:**
+  1. Added diegetic architectural clue-gathering at the **Surveyor Stele** (`survey_stele`).
+  2. Expanded upper traversal with the high-altitude **Shattered Sky-Arch** and **Aerial Resonance Bell** (`sky_bell`).
+  3. Encased `remnant_weight` inside three visible crimson-bronze containment rings (`getLockCountRemaining()`) and blocked early interaction until the player releases the **West Lever**, aligns the **East Harmonic Dial** (igniting the central **Crucible Dome Updraft**), and ascends to unseal the **Zenith Cupola Keystone**.
 
+### 2.3 Honest Regional vs. Continental Cartography (`ExplorationManager.ts`, `WorldMap.ts`)
+* **Regional Fog of War:** Maps *The Shattered Verge* onto a `28 x 8` grid filtered by `REACHABLE_VERGE_CELLS` (excluding solid bedrock so 100% regional discovery is genuinely achievable) plus `10` named landmarks.
+* **Continental Scaling & Secret Fifth Continent:** Models `18` total regions across the `4` known continents (`100%` of the Shattered Verge = `5.56%` of the Known World) while rendering the **Fifth Secret Continent** (`cont_veiled_abyss`, `totalRegions: 0`) strictly as a swirling black-violet tempest shroud on the far-eastern sea, keeping its existence a genuine visual mystery rather than a percentage spoiler.
+
+### 2.4 Orthogonal Rank (`G` to `S`) vs. Mystery Age & Punctuation Discipline
+* Separated **Adventurer Rank** (operational hazard/complexity) from **Mystery Age** (`10-Year` through `Million-Year / Ancient Epoch`) in `QuestDefinition`, HUD, and Chronicle.
+* Replaced all Unicode em dashes (`U+2014`) and en dashes (`U+2013`) across every source file, UI string, dialogue node, and HTML shell with clean colons, commas, periods, or parentheses, backed by an automated regression test in `src/game/__tests__/systems.test.ts`.
+
+### 2.5 Release-Readiness Hardening Decisions
+* **Single-Authority Canvas Centering (`src/style.css`, `src/game/config.ts`):** Removed CSS Grid/Flexbox centering from `#game-shell` and `#game-container` so Phaser `Scale.FIT` + `Scale.CENTER_BOTH` is the sole centering authority, eliminating `3:1` margin+flexbox asymmetry on `21:9`, `16:10`, and `4:3` displays.
+* **Non-Destructive Confirmation Modal (`src/game/ui/ConfirmModal.ts`):** Added a reusable in-canvas confirmation dialogue defaulting focus to `Cancel` (`index 0`) before any destructive save action (*Begin New Journey*, *Restart Chapter One*, *Replay Chapter One*) and before anchoring the *Remnant of Weight*.
+* **Optional Sky-Discovery Preservation (`waystone_lift` Grounded Counterweight Lifts):** Paired the pre-Weight stabilization warning with four post-Weight **Grounded Counterweight Lifts** so players who claim Weight before finding high-spire Echo Tablets or upper fog-of-war cells never permanently lose optional discoveries, while keeping optional collectibles strictly non-mandatory.
+* **Wayfarer's Compass-Lens Proximity Resonance (`Interactable.ts`, `GameScene.ts`):** Implemented the Relic's secondary effect as a restrained kintsugi-gold shimmer on undiscovered `echo` and `loom_clue` interactables within `480px` plus a subtle outer astrolabe directional arc around the Stabilizing Garment when equipped.
+* **Reference Artwork Packaging Hygiene (`design-references/`):** Moved internal concept and composition sheets from `public/assets/reference/` to top-level `design-references/`, preserving all reference PNGs in Git while keeping `dist/` free of unused `10.3 MB` development assets.

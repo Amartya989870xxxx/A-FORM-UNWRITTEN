@@ -34,12 +34,27 @@ export class QuestManager {
         });
       }
     }
+
+    // Reconcile any saved state where a later Main quest progressed while an earlier Main quest remained open
+    for (const def of QUEST_DEFINITIONS) {
+      if (def.category !== 'Main') continue;
+      const st = this.states.get(def.id);
+      if (st && (st.status === 'ACTIVE' || st.status === 'COMPLETED')) {
+        this.resolvePrerequisiteMainQuests(def.id, true);
+      }
+    }
   }
 
   public startQuest(questId: string, silent = false): boolean {
     const state = this.states.get(questId);
     const def = this.getDefinition(questId);
-    if (!state || !def || state.status !== 'NOT_STARTED') {
+    if (!state || !def) {
+      return false;
+    }
+    if (def.category === 'Main') {
+      this.resolvePrerequisiteMainQuests(questId, silent);
+    }
+    if (state.status !== 'NOT_STARTED') {
       return false;
     }
     state.status = 'ACTIVE';
@@ -57,15 +72,24 @@ export class QuestManager {
     const def = this.getDefinition(questId);
     if (!state || !def) return false;
 
-    if (state.status === 'NOT_STARTED') {
+    const validObj = def.objectives.find((o) => o.id === objectiveId);
+    if (!validObj) return false;
+
+    if (def.category === 'Main') {
+      this.resolvePrerequisiteMainQuests(questId, false);
+    }
+
+    const wasNotStarted = state.status === 'NOT_STARTED';
+    if (wasNotStarted) {
       state.status = 'ACTIVE';
+      this.events?.emit(GAME_EVENTS.QUEST_UPDATED, {
+        type: 'started',
+        quest: def,
+      });
     }
     if (state.completedObjectives.has(objectiveId)) {
       return false;
     }
-
-    const validObj = def.objectives.find((o) => o.id === objectiveId);
-    if (!validObj) return false;
 
     state.completedObjectives.add(objectiveId);
 
@@ -80,7 +104,7 @@ export class QuestManager {
       if (def.nextQuestId) {
         this.startQuest(def.nextQuestId);
       }
-    } else {
+    } else if (!wasNotStarted) {
       this.events?.emit(GAME_EVENTS.QUEST_UPDATED, {
         type: 'objective',
         quest: def,
@@ -88,6 +112,45 @@ export class QuestManager {
       });
     }
     return true;
+  }
+
+  /**
+   * Ensures that if a player legitimately advances into a later Main quest (for example,
+   * bypassing Oren and directly solving Wind-Spire / Crucible trials), earlier Main quests
+   * in the chain resolve cleanly so the HUD quest tracker never stalls on an outdated step.
+   */
+  private resolvePrerequisiteMainQuests(targetQuestId: string, silent: boolean): void {
+    const targetDef = this.getDefinition(targetQuestId);
+    if (!targetDef || targetDef.category !== 'Main') return;
+
+    const ancestors: QuestDefinition[] = [];
+    const visited = new Set<string>();
+    let cursor: string | undefined = targetQuestId;
+
+    while (cursor && !visited.has(cursor)) {
+      visited.add(cursor);
+      const parent = QUEST_DEFINITIONS.find(
+        (q) => q.category === 'Main' && q.nextQuestId === cursor
+      );
+      if (!parent) break;
+      ancestors.unshift(parent);
+      cursor = parent.id;
+    }
+
+    for (const anc of ancestors) {
+      const ancState = this.states.get(anc.id);
+      if (!ancState || ancState.status === 'COMPLETED') continue;
+      for (const obj of anc.objectives) {
+        ancState.completedObjectives.add(obj.id);
+      }
+      ancState.status = 'COMPLETED';
+      if (!silent) {
+        this.events?.emit(GAME_EVENTS.QUEST_UPDATED, {
+          type: 'completed',
+          quest: anc,
+        });
+      }
+    }
   }
 
   public getStatus(questId: string): QuestStatus {
@@ -103,15 +166,19 @@ export class QuestManager {
     state: QuestRuntimeState;
     currentObjectiveText: string;
   } | null {
-    for (const def of QUEST_DEFINITIONS) {
-      const state = this.states.get(def.id);
-      if (state && state.status === 'ACTIVE') {
-        const nextObj = def.objectives.find((o) => !state.completedObjectives.has(o.id));
-        return {
-          definition: def,
-          state,
-          currentObjectiveText: nextObj ? nextObj.description : 'Quest Complete',
-        };
+    // Prioritize active Main quest on the primary HUD tracker, falling back to any active quest
+    for (const pass of ['Main', 'Any'] as const) {
+      for (const def of QUEST_DEFINITIONS) {
+        if (pass === 'Main' && def.category !== 'Main') continue;
+        const state = this.states.get(def.id);
+        if (state && state.status === 'ACTIVE') {
+          const nextObj = def.objectives.find((o) => !state.completedObjectives.has(o.id));
+          return {
+            definition: def,
+            state,
+            currentObjectiveText: nextObj ? nextObj.description : 'Quest Complete',
+          };
+        }
       }
     }
     return null;
@@ -147,4 +214,3 @@ export class QuestManager {
     return QUEST_DEFINITIONS.find((q) => q.id === questId);
   }
 }
-

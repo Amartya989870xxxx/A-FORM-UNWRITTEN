@@ -15,12 +15,12 @@ export const REMNANT_DEFINITIONS: Record<RemnantId, RemnantDefinition> = {
   weight: {
     id: 'weight',
     name: 'Remnant of Weight',
-    subtitle: 'Physical Presence & Consequence',
+    subtitle: 'Garment Stabilization and Physical Anchor',
     gainedSummary:
-      'Depress heavy stone mechanisms, push runic monoliths, and unleash Ground Impact (S / Down + Space in midair) to shatter fractured stone.',
+      'Your stabilizing garment anchors firmly to the physical world. Depress heavy stone plinths, push runic monoliths, and unleash Ground Impact (S or Down + Space in midair) to shatter fractured stone.',
     lostSummary:
-      'Weightless Drift is gone. You can no longer float on air or rise through wind currents.',
-    lore: 'To exist in the world is to press against it. The sky releases you so the stone may finally remember your footsteps.',
+      'Unanchored Drift has ended. Your garment can no longer float on air or ride rising wind currents.',
+    lore: 'No flesh forms beneath the charcoal weave, yet the earth finally feels your presence. The sky lets go so the stone may remember your steps.',
   },
 };
 
@@ -56,6 +56,10 @@ export class RemnantManager {
     return this.hasWeight() ? PHYSICS_PROFILES.GROUNDED : PHYSICS_PROFILES.UNBOUND;
   }
 
+  public getStabilizationLabel(): 'Unanchored State' | 'Grounded State' {
+    return this.hasWeight() ? 'Grounded State' : 'Unanchored State';
+  }
+
   public getAllRestored(): RemnantId[] {
     return Array.from(this.restored);
   }
@@ -64,4 +68,3 @@ export class RemnantManager {
     this.restored.clear();
   }
 }
-
