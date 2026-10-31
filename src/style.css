@@ -1,0 +1,62 @@
+:root {
+  color-scheme: only dark;
+  --bg-void: #070913;
+  --bg-frame: #0b0e1a;
+  --text-primary: #e6ebf8;
+  --accent-cyan: #7ee8fa;
+  --accent-amber: #e8a948;
+
+  background-color: var(--bg-void);
+  color: var(--text-primary);
+  font-family: 'Georgia', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 100dvw;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: radial-gradient(circle at 50% 42%, #13182e 0%, var(--bg-void) 78%);
+  color: var(--text-primary);
+  user-select: none;
+}
+
+#game-shell {
+  width: 100dvw;
+  height: 100dvh;
+  display: grid;
+  place-items: center;
+  background-color: var(--bg-void);
+  color: var(--text-primary);
+}
+
+#game-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game-container canvas {
+  display: block;
+  aspect-ratio: 16 / 9;
+  max-width: 100dvw;
+  max-height: 100dvh;
+  box-shadow:
+    0 0 60px rgba(0, 0, 0, 0.85),
+    0 0 1px rgba(126, 232, 250, 0.22);
+  outline: none;
+}
+
